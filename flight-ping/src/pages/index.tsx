@@ -125,6 +125,14 @@ function DealCard({ item }: { item: DealItem }) {
 }
 
 function Page() {
+  const navigation = Route.useNavigation();
+
+  const handleTabPress = (label: string) => {
+    if (label === '비교') {
+      navigation.navigate('/compare');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -154,7 +162,11 @@ function Page() {
           { label: '찜', active: false },
           { label: '마이', active: false },
         ].map((tab) => (
-          <TouchableOpacity key={tab.label} style={styles.tab}>
+          <TouchableOpacity
+              key={tab.label}
+              style={styles.tab}
+              onPress={() => handleTabPress(tab.label)}
+            >
             <Text style={[styles.tabLabel, tab.active && styles.tabActive]}>
               {tab.label}
             </Text>
