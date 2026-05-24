@@ -3,6 +3,7 @@
 import { Route as _AboutRoute } from '../pages/about';
 import { Route as _CompareRoute } from '../pages/compare';
 import { Route as _SavedRoute } from '../pages/saved';
+import { Route as _MyRoute } from '../pages/my';
 import { Route as _IndexRoute } from '../pages/';
 
 declare module '@granite-js/react-native' {
@@ -10,6 +11,7 @@ declare module '@granite-js/react-native' {
     '/about': (typeof _AboutRoute)['_inputType'];
     '/compare': (typeof _CompareRoute)['_inputType'];
     '/saved': (typeof _SavedRoute)['_inputType'];
+    '/my': (typeof _MyRoute)['_inputType'];
     '/': (typeof _IndexRoute)['_inputType'];
   }
 
@@ -17,6 +19,7 @@ declare module '@granite-js/react-native' {
     '/about': (typeof _AboutRoute)['_outputType'];
     '/compare': (typeof _CompareRoute)['_outputType'];
     '/saved': (typeof _SavedRoute)['_outputType'];
+    '/my': (typeof _MyRoute)['_outputType'];
     '/': (typeof _IndexRoute)['_outputType'];
   }
 }
