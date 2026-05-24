@@ -131,6 +131,9 @@ function Page() {
     if (label === '비교') {
       navigation.navigate('/compare');
     }
+    if (label === '찜') {
+      navigation.navigate('/saved');
+    }
   };
 
   return (

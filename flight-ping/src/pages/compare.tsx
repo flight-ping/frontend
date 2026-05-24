@@ -594,6 +594,9 @@ function Page() {
     if (label === '홈') {
       navigation.goBack();
     }
+    if (label === '찜') {
+      navigation.navigate('/saved');
+    }
   };
 
   return (
