@@ -134,6 +134,9 @@ function Page() {
     if (label === '찜') {
       navigation.navigate('/saved');
     }
+    if (label === '마이') {
+      navigation.navigate('/my');
+    }
   };
 
   return (
