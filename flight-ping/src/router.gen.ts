@@ -5,6 +5,7 @@ import { Route as _CompareRoute } from '../pages/compare';
 import { Route as _SavedRoute } from '../pages/saved';
 import { Route as _MyRoute } from '../pages/my';
 import { Route as _IndexRoute } from '../pages/';
+import { Route as _DealDetailRoute } from '../pages/deal-detail';
 
 declare module '@granite-js/react-native' {
   interface RegisterScreenInput {
@@ -13,6 +14,7 @@ declare module '@granite-js/react-native' {
     '/saved': (typeof _SavedRoute)['_inputType'];
     '/my': (typeof _MyRoute)['_inputType'];
     '/': (typeof _IndexRoute)['_inputType'];
+    '/deal-detail': (typeof _DealDetailRoute)['_inputType'];
   }
 
   interface RegisterScreen {
@@ -21,5 +23,6 @@ declare module '@granite-js/react-native' {
     '/saved': (typeof _SavedRoute)['_outputType'];
     '/my': (typeof _MyRoute)['_outputType'];
     '/': (typeof _IndexRoute)['_outputType'];
+    '/deal-detail': (typeof _DealDetailRoute)['_outputType'];
   }
 }

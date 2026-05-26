@@ -1,12 +1,12 @@
 import { createRoute } from '@granite-js/react-native';
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  FlatList,
   ScrollView,
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  FlatList,
 } from 'react-native';
 
 export const Route = createRoute('/', {
@@ -23,6 +23,7 @@ const COLORS = {
   dday: '#EEF3FF',
   ddayText: '#2979FF',
   border: '#EEEEEE',
+  heart: '#FF5252',
 };
 
 const DEALS = [
@@ -92,6 +93,8 @@ const DEALS = [
   },
 ];
 
+const URGENT_ITEMS = DEALS.flatMap((s) => s.items).filter((item) => item.urgent);
+
 type DealItem = {
   id: string;
   airline: string;
@@ -103,9 +106,53 @@ type DealItem = {
   color: string;
 };
 
-function DealCard({ item }: { item: DealItem }) {
+function UrgentCard({
+  item,
+  saved,
+  onToggleSave,
+}: {
+  item: DealItem;
+  saved: boolean;
+  onToggleSave: (id: string) => void;
+}) {
   return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.85}>
+    <View style={styles.urgentCard}>
+      <View style={[styles.urgentBanner, { backgroundColor: item.color }]}>
+        <Text style={styles.urgentAirline}>{item.airline}</Text>
+        <View style={styles.urgentDdayBadge}>
+          <Text style={styles.urgentDdayText}>{item.dday}</Text>
+        </View>
+      </View>
+      <View style={styles.urgentBody}>
+        <Text style={styles.urgentTitle} numberOfLines={1}>{item.title}</Text>
+        <Text style={styles.urgentDest} numberOfLines={1}>{item.dest}</Text>
+        <View style={styles.urgentFooter}>
+          <Text style={styles.urgentPrice}>{item.price}</Text>
+          <TouchableOpacity
+            onPress={() => onToggleSave(item.id)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={[styles.heartIcon, saved && styles.heartSaved]}>
+              {saved ? '♥' : '♡'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function DealCard({
+  item,
+  saved,
+  onToggleSave,
+}: {
+  item: DealItem;
+  saved: boolean;
+  onToggleSave: (id: string) => void;
+}) {
+  return (
+    <View style={styles.card}>
       <View style={[styles.cardImg, { backgroundColor: item.color }]}>
         <Text style={styles.cardAirline}>{item.airline}</Text>
         <Text style={styles.cardTitleImg}>{item.title}</Text>
@@ -114,18 +161,45 @@ function DealCard({ item }: { item: DealItem }) {
         <Text style={styles.cardDest}>{item.dest}</Text>
         <Text style={styles.cardName}>{item.title}</Text>
         <Text style={styles.cardPrice}>{item.price}</Text>
-        <View style={[styles.ddayBadge, item.urgent && styles.ddayUrgent]}>
-          <Text style={[styles.ddayText, item.urgent && styles.ddayTextUrgent]}>
-            {item.dday}
-          </Text>
+        <View style={styles.cardFooter}>
+          <View style={[styles.ddayBadge, item.urgent && styles.ddayUrgent]}>
+            <Text style={[styles.ddayText, item.urgent && styles.ddayTextUrgent]}>
+              {item.dday}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => onToggleSave(item.id)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={[styles.heartIcon, saved && styles.heartSaved]}>
+              {saved ? '♥' : '♡'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
 function Page() {
   const navigation = Route.useNavigation();
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  const toggleSave = (id: string) => {
+    setSavedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleDealPress = (_id: string) => {
+    navigation.navigate('/deal-detail');
+  };
 
   const handleTabPress = (label: string) => {
     if (label === '비교') {
@@ -142,6 +216,33 @@ function Page() {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* 마감 임박 섹션 */}
+        {URGENT_ITEMS.length > 0 && (
+          <View style={styles.urgentSection}>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionTitle}>⏰ 마감 임박</Text>
+              <Text style={styles.urgentSub}>놓치면 후회해요</Text>
+            </View>
+            <FlatList
+              horizontal
+              data={URGENT_ITEMS}
+              keyExtractor={(item) => item.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.urgentList}
+              renderItem={({ item }) => (
+                <TouchableOpacity onPress={() => handleDealPress(item.id)} activeOpacity={0.9}>
+                  <UrgentCard
+                    item={item}
+                    saved={savedIds.has(item.id)}
+                    onToggleSave={toggleSave}
+                  />
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
+
+        {/* 특가 섹션들 */}
         {DEALS.map((section) => (
           <View key={section.id} style={styles.section}>
             <View style={styles.sectionHead}>
@@ -154,7 +255,15 @@ function Page() {
               showsHorizontalScrollIndicator={false}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.cardsRow}
-              renderItem={({ item }) => <DealCard item={item} />}
+              renderItem={({ item }) => (
+                <TouchableOpacity onPress={() => handleDealPress(item.id)} activeOpacity={0.9}>
+                  <DealCard
+                    item={item}
+                    saved={savedIds.has(item.id)}
+                    onToggleSave={toggleSave}
+                  />
+                </TouchableOpacity>
+              )}
             />
           </View>
         ))}
@@ -169,10 +278,10 @@ function Page() {
           { label: '마이', active: false },
         ].map((tab) => (
           <TouchableOpacity
-              key={tab.label}
-              style={styles.tab}
-              onPress={() => handleTabPress(tab.label)}
-            >
+            key={tab.label}
+            style={styles.tab}
+            onPress={() => handleTabPress(tab.label)}
+          >
             <Text style={[styles.tabLabel, tab.active && styles.tabActive]}>
               {tab.label}
             </Text>
@@ -186,11 +295,91 @@ function Page() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   scroll: { flex: 1 },
-  section: { marginBottom: 20 },
-  sectionHead: { paddingHorizontal: 20, marginTop: 16, marginBottom: 10 },
+
+  // 마감 임박 섹션
+  urgentSection: {
+    backgroundColor: COLORS.white,
+    paddingBottom: 16,
+    marginBottom: 8,
+  },
+  urgentList: {
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  urgentSub: {
+    fontSize: 12,
+    color: COLORS.urgent,
+  },
+  urgentCard: {
+    width: 160,
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 0.5,
+    borderColor: COLORS.border,
+  },
+  urgentBanner: {
+    height: 60,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 8,
+  },
+  urgentAirline: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '500',
+  },
+  urgentDdayBadge: {
+    backgroundColor: COLORS.urgent,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  urgentDdayText: {
+    fontSize: 10,
+    color: COLORS.white,
+    fontWeight: '700',
+  },
+  urgentBody: { padding: 10 },
+  urgentTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 2,
+  },
+  urgentDest: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginBottom: 6,
+  },
+  urgentFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  urgentPrice: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.urgent,
+    flex: 1,
+  },
+
+  // 특가 섹션
+  section: { marginBottom: 8 },
+  sectionHead: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
   sectionTitle: { fontSize: 15, fontWeight: '600', color: COLORS.textPrimary },
-  sectionSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  sectionSub: { fontSize: 12, color: COLORS.textSecondary },
   cardsRow: { paddingHorizontal: 20, gap: 10 },
+
+  // DealCard
   card: {
     width: 160,
     backgroundColor: COLORS.white,
@@ -205,10 +394,13 @@ const styles = StyleSheet.create({
   cardBody: { padding: 9 },
   cardDest: { fontSize: 10, color: COLORS.textSecondary, marginBottom: 2 },
   cardName: { fontSize: 12, fontWeight: '500', color: COLORS.textPrimary, marginBottom: 3 },
-  cardPrice: { fontSize: 12, fontWeight: '500', color: COLORS.primary },
+  cardPrice: { fontSize: 12, fontWeight: '500', color: COLORS.primary, marginBottom: 6 },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   ddayBadge: {
-    marginTop: 4,
-    alignSelf: 'flex-start',
     backgroundColor: COLORS.dday,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -217,6 +409,12 @@ const styles = StyleSheet.create({
   ddayUrgent: { backgroundColor: '#FFF0F0' },
   ddayText: { fontSize: 10, color: COLORS.ddayText },
   ddayTextUrgent: { color: COLORS.urgent },
+
+  // 공통 하트
+  heartIcon: { fontSize: 16, color: COLORS.border },
+  heartSaved: { color: COLORS.heart },
+
+  // 탭바
   tabbar: {
     height: 58,
     backgroundColor: COLORS.white,
