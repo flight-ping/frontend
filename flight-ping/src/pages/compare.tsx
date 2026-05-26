@@ -1,6 +1,7 @@
 import { createRoute } from '@granite-js/react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Modal,
   ScrollView,
   StyleSheet,
@@ -736,6 +737,18 @@ function Page() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(DATE_LIST[0] ?? new Date());
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const [toastMsg, setToastMsg] = useState('');
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    toastAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(toastAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.delay(1500),
+      Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start();
+  };
 
   const availableDests = useMemo(() => {
     const dests = ALL_ROUTES
@@ -756,6 +769,10 @@ function Page() {
     pickerTarget === 'departure' ? AIRPORTS : availableDests;
 
   const handleFlightSearch = () => {
+    if (dest === '전체') {
+      showToast('도착지를 선택해주세요.');
+      return;
+    }
     navigation.navigate('/flights');
   };
 
@@ -920,6 +937,27 @@ function Page() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* 토스트 */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.toast,
+          {
+            opacity: toastAnim,
+            transform: [
+              {
+                translateY: toastAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [10, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <Text style={styles.toastText}>{toastMsg}</Text>
+      </Animated.View>
 
       {/* 탭바 */}
       <View style={styles.tabbar}>
@@ -1178,6 +1216,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.primary,
     fontWeight: '700',
+  },
+
+  // 토스트
+  toast: {
+    position: 'absolute',
+    bottom: 70,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 13,
   },
 
   // 탭바
