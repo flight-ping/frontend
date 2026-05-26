@@ -26,7 +26,38 @@ type Airport =
   | '무안'
   | '양양';
 
-type PickerTarget = 'departure' | 'dest';
+type PickerTarget = 'departure' | 'dest' | 'date';
+
+// ─── 날짜 유틸 ────────────────────────────────────────────────────────────────
+
+const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
+function getDateList(count: number): Date[] {
+  const dates: Date[] = [];
+  const today = new Date();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    dates.push(d);
+  }
+  return dates;
+}
+
+function formatDateLabel(date: Date): string {
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  const day = DAY_LABELS[date.getDay() ?? 0] ?? '';
+  return `${m}월 ${d}일 (${day})`;
+}
+
+function formatDateApi(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+const DATE_LIST = getDateList(60);
 
 type FlightEvent = {
   id: string;
@@ -491,6 +522,151 @@ const ALL_ROUTES: RouteItem[] = [
   },
 ];
 
+// ─── 캘린더 컴포넌트 ─────────────────────────────────────────────────────────
+
+function CalendarPicker({
+  selectedDate,
+  onSelect,
+}: {
+  selectedDate: Date;
+  onSelect: (date: Date) => void;
+}) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const maxDate = new Date(today);
+  maxDate.setDate(today.getDate() + 60);
+
+  const [viewYear, setViewYear] = useState(selectedDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(selectedDate.getMonth());
+
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth();
+  const maxYear = maxDate.getFullYear();
+  const maxMonth = maxDate.getMonth();
+
+  const canGoPrev =
+    viewYear > todayYear || (viewYear === todayYear && viewMonth > todayMonth);
+  const canGoNext =
+    viewYear < maxYear || (viewYear === maxYear && viewMonth < maxMonth);
+
+  const goPrev = () => {
+    if (!canGoPrev) return;
+    if (viewMonth === 0) {
+      setViewYear((y) => y - 1);
+      setViewMonth(11);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
+  };
+
+  const goNext = () => {
+    if (!canGoNext) return;
+    if (viewMonth === 11) {
+      setViewYear((y) => y + 1);
+      setViewMonth(0);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
+  };
+
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+  const cells: (number | null)[] = [
+    ...Array(firstDayOfWeek).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const weeks: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7));
+  }
+
+  return (
+    <View style={cal.root}>
+      {/* 월 네비게이션 */}
+      <View style={cal.monthNav}>
+        <TouchableOpacity onPress={goPrev} disabled={!canGoPrev} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={[cal.navArrow, !canGoPrev && cal.navArrowDisabled]}>‹</Text>
+        </TouchableOpacity>
+        <Text style={cal.monthLabel}>{viewYear}년 {viewMonth + 1}월</Text>
+        <TouchableOpacity onPress={goNext} disabled={!canGoNext} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={[cal.navArrow, !canGoNext && cal.navArrowDisabled]}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 요일 헤더 */}
+      <View style={cal.weekRow}>
+        {DAY_LABELS.map((d, i) => (
+          <Text
+            key={d}
+            style={[
+              cal.dayHeader,
+              i === 0 && cal.sundayText,
+              i === 6 && cal.saturdayText,
+            ]}
+          >
+            {d}
+          </Text>
+        ))}
+      </View>
+
+      {/* 날짜 그리드 */}
+      {weeks.map((week, wi) => (
+        <View key={wi} style={cal.weekRow}>
+          {week.map((day, di) => {
+            if (day === null) {
+              return <View key={di} style={cal.dayCell} />;
+            }
+            const cellDate = new Date(viewYear, viewMonth, day);
+            cellDate.setHours(0, 0, 0, 0);
+            const isPast = cellDate < today;
+            const isTooFar = cellDate > maxDate;
+            const isDisabled = isPast || isTooFar;
+            const isToday = cellDate.getTime() === today.getTime();
+            const isSelected =
+              formatDateApi(cellDate) === formatDateApi(selectedDate);
+            const isSunday = di === 0;
+            const isSaturday = di === 6;
+
+            return (
+              <TouchableOpacity
+                key={di}
+                style={cal.dayCell}
+                onPress={() => { if (!isDisabled) onSelect(cellDate); }}
+                disabled={isDisabled}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    cal.dayCellInner,
+                    isSelected && cal.dayCellSelected,
+                    isToday && !isSelected && cal.dayCellToday,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      cal.dayNum,
+                      isDisabled && cal.dayNumDisabled,
+                      isSelected && cal.dayNumSelected,
+                      !isDisabled && isSunday && cal.sundayText,
+                      !isDisabled && isSaturday && cal.saturdayText,
+                    ]}
+                  >
+                    {day}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
 
 function EventCard({ event }: { event: FlightEvent }) {
@@ -559,6 +735,7 @@ function Page() {
   const [dest, setDest] = useState<string>('전체');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(DATE_LIST[0] ?? new Date());
 
   const availableDests = useMemo(() => {
     const dests = ALL_ROUTES
@@ -577,6 +754,10 @@ function Page() {
 
   const pickerOptions: string[] =
     pickerTarget === 'departure' ? AIRPORTS : availableDests;
+
+  const handleFlightSearch = () => {
+    navigation.navigate('/flights');
+  };
 
   const handlePickerSelect = (option: string) => {
     if (pickerTarget === 'departure') {
@@ -606,22 +787,38 @@ function Page() {
     <View style={styles.container}>
       {/* 검색 박스 */}
       <View style={styles.searchBox}>
+        <View style={styles.searchRow}>
+          <TouchableOpacity
+            style={styles.searchField}
+            onPress={() => setPickerTarget('departure')}
+          >
+            <Text style={styles.searchLabel}>출발지</Text>
+            <Text style={styles.searchValue}>{departure}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.searchFieldDivider} />
+
+          <TouchableOpacity
+            style={styles.searchField}
+            onPress={() => setPickerTarget('dest')}
+          >
+            <Text style={styles.searchLabel}>도착지</Text>
+            <Text style={styles.searchValue}>{dest}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.searchDividerH} />
+
         <TouchableOpacity
-          style={styles.searchField}
-          onPress={() => setPickerTarget('departure')}
+          style={styles.dateField}
+          onPress={() => setPickerTarget('date')}
         >
-          <Text style={styles.searchLabel}>출발지</Text>
-          <Text style={styles.searchValue}>{departure}</Text>
+          <Text style={styles.searchLabel}>날짜</Text>
+          <Text style={styles.searchValue}>{formatDateLabel(selectedDate)}</Text>
         </TouchableOpacity>
 
-        <View style={styles.searchFieldDivider} />
-
-        <TouchableOpacity
-          style={styles.searchField}
-          onPress={() => setPickerTarget('dest')}
-        >
-          <Text style={styles.searchLabel}>도착지</Text>
-          <Text style={styles.searchValue}>{dest}</Text>
+        <TouchableOpacity style={styles.searchBtn} onPress={handleFlightSearch}>
+          <Text style={styles.searchBtnText}>항공편 찾기</Text>
         </TouchableOpacity>
       </View>
 
@@ -646,9 +843,9 @@ function Page() {
         <View style={{ height: 20 }} />
       </ScrollView>
 
-      {/* 선택 모달 */}
+      {/* 출발지/도착지 선택 모달 */}
       <Modal
-        visible={pickerTarget !== null}
+        visible={pickerTarget === 'departure' || pickerTarget === 'dest'}
         transparent
         animationType="slide"
         onRequestClose={() => setPickerTarget(null)}
@@ -694,6 +891,36 @@ function Page() {
         </TouchableOpacity>
       </Modal>
 
+      {/* 날짜 선택 모달 (캘린더) */}
+      <Modal
+        visible={pickerTarget === 'date'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickerTarget(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setPickerTarget(null)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.calModalSheet}
+          >
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>날짜 선택</Text>
+            <CalendarPicker
+              selectedDate={selectedDate}
+              onSelect={(date) => {
+                setSelectedDate(date);
+                setPickerTarget(null);
+              }}
+            />
+            <View style={{ height: 20 }} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* 탭바 */}
       <View style={styles.tabbar}>
         {[
@@ -724,7 +951,6 @@ const styles = StyleSheet.create({
 
   // 검색 박스
   searchBox: {
-    flexDirection: 'row',
     backgroundColor: COLORS.white,
     marginHorizontal: 16,
     marginVertical: 12,
@@ -732,6 +958,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
+  },
+  searchRow: {
+    flexDirection: 'row',
   },
   searchField: {
     flex: 1,
@@ -743,6 +972,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border,
     marginVertical: 12,
   },
+  searchDividerH: {
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dateField: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
   searchLabel: {
     fontSize: 11,
     color: COLORS.textSecondary,
@@ -752,6 +989,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: COLORS.textPrimary,
+  },
+  searchBtn: {
+    backgroundColor: COLORS.primary,
+    margin: 12,
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  searchBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.white,
   },
 
   // 섹션 헤더
@@ -887,6 +1136,12 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     maxHeight: '60%',
   },
+  calModalSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 12,
+  },
   modalHandle: {
     width: 36,
     height: 4,
@@ -936,4 +1191,86 @@ const styles = StyleSheet.create({
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   tabLabel: { fontSize: 12, color: COLORS.textSecondary },
   tabActive: { color: COLORS.primary, fontWeight: '600' },
+});
+
+// ─── 캘린더 스타일 ────────────────────────────────────────────────────────────
+
+const CELL_SIZE = 40;
+
+const cal = StyleSheet.create({
+  root: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+  },
+  monthNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    marginBottom: 12,
+  },
+  navArrow: {
+    fontSize: 26,
+    fontWeight: '300',
+    color: COLORS.textPrimary,
+    paddingHorizontal: 8,
+  },
+  navArrowDisabled: {
+    color: COLORS.border,
+  },
+  monthLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  weekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 4,
+  },
+  dayHeader: {
+    width: CELL_SIZE,
+    textAlign: 'center',
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+    paddingVertical: 4,
+  },
+  dayCell: {
+    width: CELL_SIZE,
+    height: CELL_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayCellInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayCellSelected: {
+    backgroundColor: COLORS.primary,
+  },
+  dayCellToday: {
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+  },
+  dayNum: {
+    fontSize: 14,
+    color: COLORS.textPrimary,
+  },
+  dayNumDisabled: {
+    color: COLORS.border,
+  },
+  dayNumSelected: {
+    color: COLORS.white,
+    fontWeight: '700',
+  },
+  sundayText: {
+    color: '#FF5252',
+  },
+  saturdayText: {
+    color: COLORS.primary,
+  },
 });
