@@ -1,7 +1,9 @@
 import { createRoute } from '@granite-js/react-native';
 import React, { useState } from 'react';
 import {
-  FlatList,
+  Dimensions,
+  Image,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,27 +11,42 @@ import {
   View,
 } from 'react-native';
 
+const CARD_WIDTH = (Dimensions.get('window').width - 12 * 2 - 10) / 2;
+
 export const Route = createRoute('/saved', {
   component: Page,
 });
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
-type SavedEvent = {
+type TabType = 'flight' | 'deal';
+
+type SavedFlight = {
+  id: string;
+  airline: string;
+  flightNo: string;
+  departure: string;
+  destination: string;
+  departureTime: string;
+  arrivalTime: string;
+  duration: string;
+  stops: number;
+  price: number;
+  date: string;
+};
+
+type SavedDeal = {
   id: string;
   airline: string;
   title: string;
-  departure: string;
   dest: string;
-  flag: string;
-  saleStart: string;
-  saleEnd: string;
-  price: number;
+  price: string;
   dday: string;
   urgent: boolean;
+  color: string;
 };
 
-// ─── 더미 데이터 ──────────────────────────────────────────────────────────────
+// 색상
 
 const COLORS = {
   primary: '#2979FF',
@@ -45,223 +62,358 @@ const COLORS = {
   heart: '#FF5252',
 };
 
-const INITIAL_SAVED: SavedEvent[] = [
+// 항공사 매핑 더미 데이터
+
+const AIRLINE_URLS: Record<string, string> = {
+  '대한항공': 'https://www.koreanair.com',
+  '아시아나항공': 'https://flyasiana.com',
+  '제주항공': 'https://www.jejuair.net',
+  '진에어': 'https://www.jinair.com',
+  '티웨이항공': 'https://www.twayair.com',
+  '에어서울': 'https://www.airseoul.com',
+  '에어부산': 'https://www.airbusan.com',
+  '에어프레미아': 'https://www.airpremia.com',
+};
+
+const AIRPORT_CODE: Record<string, string> = {
+  '인천': 'ICN', '김포': 'GMP', '부산': 'PUS', '대구': 'TAE',
+  '제주': 'CJU', '청주': 'CJJ', '광주': 'KWJ', '무안': 'MWX', '양양': 'YNY',
+  '도쿄': 'NRT', '오사카': 'KIX', '후쿠오카': 'FUK', '삿포로': 'CTS',
+  '방콕': 'BKK', '다낭': 'DAD', '세부': 'CEB', '하노이': 'HAN', '호치민': 'SGN',
+  '싱가포르': 'SIN', '홍콩': 'HKG', '타이베이': 'TPE', '괌': 'GUM',
+};
+
+const AIRLINE_IATA: Record<string, string> = {
+  '대한항공': 'KE',
+  '아시아나항공': 'OZ',
+  '제주항공': '7C',
+  '진에어': 'LJ',
+  '티웨이항공': 'TW',
+  '에어서울': 'RS',
+  '에어부산': 'BX',
+  '에어프레미아': 'YP',
+};
+
+function getLogoUrl(airline: string): string {
+  const iata = AIRLINE_IATA[airline];
+  return iata
+    ? `https://www.gstatic.com/flights/airline_logos/70px/${iata}.png`
+    : '';
+}
+
+const INITIAL_FLIGHTS: SavedFlight[] = [
   {
-    id: 's1',
-    airline: '티웨이항공',
-    title: '번쩍특가 동남아',
-    departure: '인천',
-    dest: '방콕',
-    flag: '🇹🇭',
-    saleStart: '2025.05.18',
-    saleEnd: '2025.05.20',
-    price: 139000,
-    dday: 'D-2',
-    urgent: true,
-  },
-  {
-    id: 's2',
-    airline: '필리핀항공',
-    title: '세부 여름 특가',
-    departure: '인천',
-    dest: '세부',
-    flag: '🇵🇭',
-    saleStart: '2025.05.19',
-    saleEnd: '2025.05.19',
-    price: 209000,
-    dday: 'D-1',
-    urgent: true,
-  },
-  {
-    id: 's3',
-    airline: '에어부산',
-    title: '여름맞이 국내선 특가',
-    departure: '김포',
-    dest: '제주',
-    flag: '🇰🇷',
-    saleStart: '2025.05.18',
-    saleEnd: '2025.05.19',
-    price: 49900,
-    dday: 'D-1',
-    urgent: true,
-  },
-  {
-    id: 's4',
-    airline: '진에어',
-    title: '일본 5대 노선 특가',
-    departure: '인천',
-    dest: '도쿄',
-    flag: '🇯🇵',
-    saleStart: '2025.05.15',
-    saleEnd: '2025.05.30',
-    price: 143900,
-    dday: 'D-12',
-    urgent: false,
-  },
-  {
-    id: 's5',
+    id: 'f1',
     airline: '에어서울',
-    title: '방방곡곡 여행 특가',
+    flightNo: 'RS 101',
     departure: '인천',
-    dest: '후쿠오카',
-    flag: '🇯🇵',
-    saleStart: '2025.05.10',
-    saleEnd: '2025.05.28',
-    price: 168000,
-    dday: 'D-8',
-    urgent: false,
+    destination: '도쿄',
+    departureTime: '16:50',
+    arrivalTime: '19:10',
+    duration: '2h 20m',
+    stops: 0,
+    price: 79900,
+    date: '5월 26일 (월)',
+  },
+  {
+    id: 'f2',
+    airline: '제주항공',
+    flightNo: '7C 1101',
+    departure: '인천',
+    destination: '오사카',
+    departureTime: '06:05',
+    arrivalTime: '08:20',
+    duration: '2h 15m',
+    stops: 0,
+    price: 88000,
+    date: '6월 3일 (화)',
+  },
+  {
+    id: 'f3',
+    airline: '진에어',
+    flightNo: 'LJ 201',
+    departure: '인천',
+    destination: '도쿄',
+    departureTime: '08:30',
+    arrivalTime: '10:50',
+    duration: '2h 20m',
+    stops: 0,
+    price: 95900,
+    date: '6월 10일 (화)',
   },
 ];
 
+const INITIAL_DEALS: SavedDeal[] = [
+  {
+    id: 'd1',
+    airline: '에어부산',
+    title: '여름맞이 국내선 특가',
+    dest: '제주, 김포',
+    price: '왕복 49,900원~',
+    dday: 'D-1',
+    urgent: true,
+    color: '#1E88E5',
+  },
+  {
+    id: 'd2',
+    airline: '티웨이항공',
+    title: '번쩍특가 동남아',
+    dest: '방콕, 다낭, 세부',
+    price: '왕복 139,000원~',
+    dday: 'D-2',
+    urgent: true,
+    color: '#E91E63',
+  },
+  {
+    id: 'd3',
+    airline: '진에어',
+    title: '일본 5대 노선 특가',
+    dest: '후쿠오카, 도쿄 외 3개',
+    price: '왕복 143,900원~',
+    dday: 'D-12',
+    urgent: false,
+    color: '#2979FF',
+  },
+];
+
+function parseDday(dday: string): number {
+  return parseInt(dday.replace('D-', ''), 10);
+}
+
 // ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
 
-function EmptyState({ onBrowse }: { onBrowse: () => void }) {
-  return (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>🤍</Text>
-      <Text style={styles.emptyTitle}>아직 찜한 특가가 없어요</Text>
-      <Text style={styles.emptyDesc}>
-        마음에 드는 특가를 찜해두면{'\n'}여기서 모아볼 수 있어요
-      </Text>
-      <TouchableOpacity style={styles.emptyButton} onPress={onBrowse}>
-        <Text style={styles.emptyButtonText}>특가 둘러보기</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function UrgentCard({
+function FlightCard({
   item,
   onRemove,
+  onPress,
 }: {
-  item: SavedEvent;
+  item: SavedFlight;
   onRemove: (id: string) => void;
+  onPress: () => void;
 }) {
+  const logoUrl = getLogoUrl(item.airline);
   return (
-    <View style={styles.urgentCard}>
-      <View style={styles.urgentCardTop}>
-        <Text style={styles.urgentAirline}>{item.airline}</Text>
-        <View style={styles.urgentDdayBadge}>
-          <Text style={styles.urgentDdayText}>{item.dday}</Text>
+    <TouchableOpacity style={styles.flightCard} onPress={onPress} activeOpacity={0.8}>
+      {/* 날짜 + 찜 버튼 */}
+      <View style={styles.flightTopRow}>
+        <Text style={styles.flightDate}>{item.date}</Text>
+        <TouchableOpacity
+          onPress={() => onRemove(item.id)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.heartIcon}>♥</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 시간 + 출도착지 */}
+      <View style={styles.flightTimeRow}>
+        <View style={styles.flightTimeCol}>
+          <Text style={styles.flightTime}>{item.departureTime}</Text>
+          <Text style={styles.flightAirport}>{item.departure}</Text>
+          <Text style={styles.flightAirportCode}>{AIRPORT_CODE[item.departure] ?? ''}</Text>
+        </View>
+        <View style={styles.flightDurationRow}>
+          <View style={styles.flightLine} />
+          <Text style={styles.flightDuration}>
+            {item.duration} · {item.stops === 0 ? '직항' : `경유 ${item.stops}`}
+          </Text>
+          <View style={styles.flightLine} />
+        </View>
+        <View style={styles.flightTimeCol}>
+          <Text style={styles.flightTime}>{item.arrivalTime}</Text>
+          <Text style={styles.flightAirport}>{item.destination}</Text>
+          <Text style={styles.flightAirportCode}>{AIRPORT_CODE[item.destination] ?? ''}</Text>
         </View>
       </View>
-      <Text style={styles.urgentFlag}>{item.flag}</Text>
-      <Text style={styles.urgentDest}>{item.dest}</Text>
-      <Text style={styles.urgentRoute}>
-        {item.departure} → {item.dest}
-      </Text>
-      <Text style={styles.urgentPrice}>{item.price.toLocaleString()}원~</Text>
-      <TouchableOpacity
-        style={styles.urgentRemoveBtn}
-        onPress={() => onRemove(item.id)}
-      >
-        <Text style={styles.heartIcon}>♥</Text>
-      </TouchableOpacity>
-    </View>
+
+      {/* 항공사 + 가격 */}
+      <View style={styles.flightBottom}>
+        <View style={styles.flightAirlineRow}>
+          {logoUrl !== '' && (
+            <Image source={{ uri: logoUrl }} style={styles.flightLogo} resizeMode="contain" />
+          )}
+          <Text style={styles.flightAirline}>{item.airline}</Text>
+          <Text style={styles.flightNo}>{item.flightNo}</Text>
+        </View>
+        <Text style={styles.flightPrice}>{item.price.toLocaleString()}원~</Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
-function SavedCard({
+function DealCard({
   item,
   onRemove,
+  onPress,
 }: {
-  item: SavedEvent;
+  item: SavedDeal;
   onRemove: (id: string) => void;
+  onPress: () => void;
 }) {
   return (
-    <View style={styles.savedCard}>
-      <View style={styles.savedCardBody}>
-        <View style={styles.savedCardTop}>
-          <View style={styles.savedCardTopLeft}>
-            <Text style={styles.savedFlag}>{item.flag}</Text>
-            <Text style={styles.savedAirline}>{item.airline}</Text>
-          </View>
-          <View style={[styles.ddayBadge, item.urgent && styles.ddayBadgeUrgent]}>
-            <Text style={[styles.ddayText, item.urgent && styles.ddayTextUrgent]}>
+    <TouchableOpacity style={styles.dealCard} onPress={onPress} activeOpacity={0.85}>
+      {/* 컬러 상단 */}
+      <View style={[styles.dealTop, { backgroundColor: item.color }]}>
+        <Text style={styles.dealTopAirline}>{item.airline}</Text>
+        <Text style={styles.dealTopTitle} numberOfLines={2}>{item.title}</Text>
+        <TouchableOpacity
+          style={styles.dealHeartBtn}
+          onPress={() => onRemove(item.id)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.dealHeartIcon}>♥</Text>
+        </TouchableOpacity>
+      </View>
+      {/* 하단 정보 */}
+      <View style={styles.dealBottom}>
+        <Text style={styles.dealBottomDest} numberOfLines={1}>{item.dest}</Text>
+        <View style={styles.dealBottomRow}>
+          <Text style={styles.dealBottomPrice} numberOfLines={1}>{item.price}</Text>
+          <View style={[styles.dealDdayBadge, item.urgent && styles.dealDdayBadgeUrgent]}>
+            <Text style={[styles.dealDdayText, item.urgent && styles.dealDdayTextUrgent]}>
               {item.dday}
             </Text>
           </View>
         </View>
-        <Text style={styles.savedTitle}>{item.title}</Text>
-        <Text style={styles.savedRoute}>
-          {item.departure} → {item.dest}
-        </Text>
-        <Text style={styles.savedPeriod}>
-          판매 {item.saleStart} ~ {item.saleEnd}
-        </Text>
-        <Text style={styles.savedPrice}>{item.price.toLocaleString()}원~</Text>
       </View>
-      <TouchableOpacity
-        style={styles.savedRemoveBtn}
-        onPress={() => onRemove(item.id)}
-      >
-        <Text style={styles.heartIcon}>♥</Text>
-      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyIcon}>🤍</Text>
+      <Text style={styles.emptyText}>{message}</Text>
     </View>
   );
 }
 
 function Page() {
   const navigation = Route.useNavigation();
-  const [saved, setSaved] = useState<SavedEvent[]>(INITIAL_SAVED);
+  const [activeTab, setActiveTab] = useState<TabType>('flight');
+  const [flights, setFlights] = useState<SavedFlight[]>(INITIAL_FLIGHTS);
+  const [deals, setDeals] = useState<SavedDeal[]>(INITIAL_DEALS);
+  const [selectedDest, setSelectedDest] = useState<string>('전체');
 
-  const urgentItems = saved.filter((e) => e.urgent);
-  const isEmpty = saved.length === 0;
+  // 목적지 필터 옵션
+  const destinations = ['전체', ...Array.from(new Set(flights.map((f) => f.destination)))];
 
-  const handleRemove = (id: string) => {
-    setSaved((prev) => prev.filter((e) => e.id !== id));
+  // 필터된 항공권
+  const filteredFlights =
+    selectedDest === '전체'
+      ? flights
+      : flights.filter((f) => f.destination === selectedDest);
+
+  // 마감일순 정렬 특가
+  const sortedDeals = [...deals].sort(
+    (a, b) => parseDday(a.dday) - parseDday(b.dday),
+  );
+
+  const handleRemoveFlight = (id: string) => {
+    setFlights((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  const handleRemoveDeal = (id: string) => {
+    setDeals((prev) => prev.filter((d) => d.id !== id));
   };
 
   const handleTabPress = (label: string) => {
-    if (label === '홈') {
-      navigation.goBack();
-    }
-    if (label === '비교') {
-      navigation.navigate('/compare');
-    }
-    if (label === '마이') {
-      navigation.navigate('/my');
-    }
+    if (label === '홈') navigation.goBack();
+    if (label === '비교') navigation.navigate('/compare');
+    if (label === '마이') navigation.navigate('/my');
   };
 
   return (
     <View style={styles.container}>
-      {isEmpty ? (
-        <EmptyState onBrowse={() => navigation.goBack()} />
-      ) : (
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* 마감 임박 섹션 */}
-          {urgentItems.length > 0 && (
-            <View style={styles.urgentSection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>⏰ 마감 임박</Text>
-                <Text style={styles.sectionSub}>곧 판매가 종료돼요</Text>
-              </View>
-              <FlatList
-                horizontal
-                data={urgentItems}
-                keyExtractor={(item) => item.id}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.urgentList}
-                renderItem={({ item }) => (
-                  <UrgentCard item={item} onRemove={handleRemove} />
-                )}
-                scrollEnabled
-              />
-            </View>
-          )}
+      {/* 상단 탭 */}
+      <View style={styles.topTabBar}>
+        {(['flight', 'deal'] as TabType[]).map((tab) => {
+          const label = tab === 'flight' ? '항공권' : '특가';
+          const isActive = activeTab === tab;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={styles.topTab}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.topTabText, isActive && styles.topTabTextActive]}>
+                {label}
+              </Text>
+              {isActive && <View style={styles.topTabUnderline} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
-          {/* 전체 찜 목록 */}
-          <View style={styles.allSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>전체</Text>
-              <Text style={styles.sectionCount}>{saved.length}개</Text>
-            </View>
-            {saved.map((item) => (
-              <SavedCard key={item.id} item={item} onRemove={handleRemove} />
-            ))}
+      {/* 항공권 탭 */}
+      {activeTab === 'flight' && (
+        <>
+          {/* 목적지 필터 */}
+          <View style={styles.filterBar}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterBarContent}
+            >
+              {destinations.map((dest) => (
+                <TouchableOpacity
+                  key={dest}
+                  style={[styles.filterChip, selectedDest === dest && styles.filterChipActive]}
+                  onPress={() => setSelectedDest(dest)}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      selectedDest === dest && styles.filterChipTextActive,
+                    ]}
+                  >
+                    {dest}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
 
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {filteredFlights.length === 0 ? (
+              <EmptyState message="찜한 항공권이 없어요" />
+            ) : (
+              filteredFlights.map((item) => (
+                <FlightCard
+                  key={item.id}
+                  item={item}
+                  onRemove={handleRemoveFlight}
+                  onPress={() =>
+                    Linking.openURL(
+                      AIRLINE_URLS[item.airline] ?? 'https://www.google.com/travel/flights',
+                    )
+                  }
+                />
+              ))
+            )}
+            <View style={{ height: 20 }} />
+          </ScrollView>
+        </>
+      )}
+
+      {/* 특가 탭 */}
+      {activeTab === 'deal' && (
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {sortedDeals.length === 0 ? (
+            <EmptyState message="찜한 특가가 없어요" />
+          ) : (
+            <View style={styles.dealGrid}>
+              {sortedDeals.map((item) => (
+                <DealCard
+                  key={item.id}
+                  item={item}
+                  onRemove={handleRemoveDeal}
+                  onPress={() => navigation.navigate('/deal-detail')}
+                />
+              ))}
+            </View>
+          )}
           <View style={{ height: 20 }} />
         </ScrollView>
       )}
@@ -294,198 +446,240 @@ function Page() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
 
-  // 빈 상태
-  emptyContainer: {
+  // 상단 탭
+  topTabBar: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  topTab: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
+    paddingVertical: 14,
   },
-  emptyIcon: { fontSize: 48, marginBottom: 16 },
-  emptyTitle: {
-    fontSize: 18,
+  topTabText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+  },
+  topTabTextActive: {
+    color: COLORS.primary,
     fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginBottom: 8,
   },
-  emptyDesc: {
+  topTabUnderline: {
+    position: 'absolute',
+    bottom: 0,
+    left: 16,
+    right: 16,
+    height: 2,
+    backgroundColor: COLORS.primary,
+    borderRadius: 1,
+  },
+
+  // 목적지 필터
+  filterBar: {
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 0.5,
+    borderBottomColor: COLORS.border,
+    paddingVertical: 9,
+  },
+  filterBarContent: {
+    paddingHorizontal: 16,
+    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterChip: {
+    height: 28,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+  },
+  filterChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+  },
+  filterChipTextActive: {
+    color: COLORS.white,
+    fontWeight: '500',
+  },
+
+  // 빈 상태
+  emptyContainer: {
+    alignItems: 'center',
+    paddingTop: 80,
+    gap: 12,
+  },
+  emptyIcon: { fontSize: 40 },
+  emptyText: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 28,
-  },
-  emptyButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 28,
-    paddingVertical: 13,
-    borderRadius: 12,
-  },
-  emptyButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.white,
   },
 
-  // 공통 섹션 헤더
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-  },
-  sectionSub: {
-    fontSize: 12,
-    color: COLORS.urgent,
-  },
-  sectionCount: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-
-  // 마감 임박 섹션
-  urgentSection: {
+  // 항공권 카드
+  flightCard: {
+    marginHorizontal: 16,
+    marginTop: 10,
     backgroundColor: COLORS.white,
-    paddingBottom: 16,
-    marginBottom: 8,
-  },
-  urgentList: {
-    paddingHorizontal: 20,
-    gap: 10,
-  },
-  urgentCard: {
-    width: 150,
-    backgroundColor: COLORS.urgentBg,
-    borderRadius: 14,
+    borderRadius: 12,
     padding: 14,
-    borderWidth: 1,
-    borderColor: '#FFD6D6',
+    borderWidth: 0.5,
+    borderColor: COLORS.border,
   },
-  urgentCardTop: {
+  flightTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
+    paddingHorizontal: 4,
   },
-  urgentAirline: {
-    fontSize: 10,
-    color: COLORS.textSecondary,
-    flex: 1,
-  },
-  urgentDdayBadge: {
-    backgroundColor: COLORS.urgent,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  urgentDdayText: {
-    fontSize: 10,
-    color: COLORS.white,
-    fontWeight: '700',
-  },
-  urgentFlag: { fontSize: 24, marginBottom: 4 },
-  urgentDest: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginBottom: 2,
-  },
-  urgentRoute: {
-    fontSize: 10,
-    color: COLORS.textSecondary,
-    marginBottom: 6,
-  },
-  urgentPrice: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.urgent,
-  },
-  urgentRemoveBtn: {
-    position: 'absolute',
-    bottom: 10,
-    right: 12,
-  },
-
-  // 전체 찜 목록
-  allSection: {
-    backgroundColor: COLORS.white,
-  },
-  savedCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  savedCardBody: { flex: 1 },
-  savedCardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  savedCardTopLeft: {
+  flightAirlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  savedFlag: { fontSize: 16 },
-  savedAirline: {
+  flightLogo: { width: 20, height: 20, borderRadius: 4 },
+  flightAirline: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#444444',
+  },
+  flightNo: { fontSize: 11, color: COLORS.textSecondary },
+  flightDate: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#444444',
+  },
+  flightTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+    paddingHorizontal: 8,
+  },
+  flightTimeCol: {
+    alignItems: 'center',
+  },
+  flightTime: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  flightAirport: {
     fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  ddayBadge: {
-    backgroundColor: COLORS.dday,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  ddayBadgeUrgent: { backgroundColor: COLORS.urgentBg },
-  ddayText: {
-    fontSize: 10,
-    color: COLORS.ddayText,
-    fontWeight: '500',
-  },
-  ddayTextUrgent: { color: COLORS.urgent },
-  savedTitle: {
-    fontSize: 15,
     fontWeight: '600',
     color: COLORS.textPrimary,
-    marginBottom: 4,
+    marginTop: 2,
   },
-  savedRoute: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginBottom: 3,
-  },
-  savedPeriod: {
+  flightAirportCode: {
     fontSize: 11,
     color: COLORS.textSecondary,
-    marginBottom: 5,
+    marginTop: 1,
   },
-  savedPrice: {
+  flightDurationRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  flightLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
+  flightDuration: { fontSize: 10, color: COLORS.textSecondary },
+  flightBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingHorizontal: 4,
+  },
+  flightPrice: {
     fontSize: 14,
     fontWeight: '700',
     color: COLORS.primary,
   },
-  savedRemoveBtn: {
-    paddingLeft: 16,
-    paddingVertical: 8,
+
+  // 특가 그리드
+  dealGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    gap: 10,
   },
+  dealCard: {
+    width: CARD_WIDTH,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: COLORS.white,
+    borderWidth: 0.5,
+    borderColor: COLORS.border,
+  },
+  dealTop: {
+    height: 96,
+    padding: 12,
+    justifyContent: 'flex-end',
+  },
+  dealTopAirline: {
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.75)',
+    marginBottom: 3,
+  },
+  dealTopTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+    lineHeight: 17,
+  },
+  dealHeartBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+  },
+  dealHeartIcon: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
+  },
+  dealBottom: {
+    padding: 10,
+  },
+  dealBottomDest: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginBottom: 5,
+  },
+  dealBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dealBottomPrice: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+    flex: 1,
+  },
+  dealDdayBadge: {
+    backgroundColor: COLORS.dday,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  dealDdayBadgeUrgent: { backgroundColor: COLORS.urgentBg },
+  dealDdayText: { fontSize: 9, color: COLORS.ddayText, fontWeight: '500' },
+  dealDdayTextUrgent: { color: COLORS.urgent },
 
   // 공통
-  heartIcon: {
-    fontSize: 20,
-    color: COLORS.heart,
-  },
+  heartIcon: { fontSize: 20, color: COLORS.heart },
 
   // 탭바
   tabbar: {
