@@ -12,6 +12,7 @@ import {
 
 export const Route = createRoute('/compare', {
   component: Page,
+  screenOptions: { animation: 'none' },
 });
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
