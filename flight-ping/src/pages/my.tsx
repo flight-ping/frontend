@@ -160,7 +160,7 @@ function Page() {
   };
 
   const handleTabPress = (label: string) => {
-    if (label === '홈') navigation.goBack();
+    if (label === '홈') navigation.popToTop();
     if (label === '비교') navigation.navigate('/compare');
     if (label === '찜') navigation.navigate('/saved');
   };

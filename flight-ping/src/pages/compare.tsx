@@ -791,7 +791,7 @@ function Page() {
 
   const handleTabPress = (label: string) => {
     if (label === '홈') {
-      navigation.goBack();
+      navigation.popToTop();
     }
     if (label === '찜') {
       navigation.navigate('/saved');
