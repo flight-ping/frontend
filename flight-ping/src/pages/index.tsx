@@ -30,7 +30,7 @@ const COLORS = {
 const DEALS = [
   {
     id: '1',
-    section: '이번 주 특가 🔥',
+    section: '🔥 이번 주 특가',
     sectionSub: '놓치면 아까운 기간 한정 이벤트',
     items: [
       {
@@ -67,8 +67,8 @@ const DEALS = [
   },
   {
     id: '2',
-    section: '국내선 특가',
-    sectionSub: '제주, 부산 출발',
+    section: '🛫 국내선 특가',
+    sectionSub: '',
     items: [
       {
         id: 'd4',
@@ -106,6 +106,59 @@ type DealItem = {
   urgent: boolean;
   color: string;
 };
+
+type RouteRecommendation = {
+  departure: string;
+  dest: string;
+  deals: DealItem[];
+};
+
+// ─── 추천 더미 데이터 ─────────────────────────────────────────────────────────
+
+const RECOMMENDATIONS: RouteRecommendation[] = [
+  {
+    departure: '인천',
+    dest: '도쿄',
+    deals: [
+      {
+        id: 'rec1',
+        airline: '진에어',
+        title: '일본 5대 노선 특가',
+        dest: '도쿄, 오사카 외 3개',
+        price: '왕복 143,900원~',
+        dday: 'D-12',
+        urgent: false,
+        color: '#2979FF',
+      },
+      {
+        id: 'rec2',
+        airline: '대한항공',
+        title: '도쿄 얼리버드 특가',
+        dest: '도쿄 (NRT)',
+        price: '왕복 189,000원~',
+        dday: 'D-5',
+        urgent: true,
+        color: '#1565C0',
+      },
+    ],
+  },
+  {
+    departure: '인천',
+    dest: '방콕',
+    deals: [
+      {
+        id: 'rec3',
+        airline: '티웨이항공',
+        title: '번쩍특가 동남아',
+        dest: '방콕, 다낭, 세부',
+        price: '왕복 139,000원~',
+        dday: 'D-2',
+        urgent: true,
+        color: '#E91E63',
+      },
+    ],
+  },
+];
 
 function UrgentCard({
   item,
@@ -243,12 +296,40 @@ function Page() {
           </View>
         )}
 
+        {/* 관심 노선 추천 섹션 */}
+        {RECOMMENDATIONS.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionTitle}>⭐ 관심 노선 추천</Text>
+              <Text style={styles.sectionSub}>찜한 노선에 특가가 떴어요</Text>
+            </View>
+            <FlatList
+              horizontal
+              data={RECOMMENDATIONS.flatMap((rec) => rec.deals)}
+              keyExtractor={(item) => item.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.cardsRow}
+              renderItem={({ item }) => (
+                <TouchableOpacity onPress={() => handleDealPress(item.id)} activeOpacity={0.9}>
+                  <DealCard
+                    item={item}
+                    saved={savedIds.has(item.id)}
+                    onToggleSave={toggleSave}
+                  />
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
+
         {/* 특가 섹션들 */}
         {DEALS.map((section) => (
           <View key={section.id} style={styles.section}>
             <View style={styles.sectionHead}>
               <Text style={styles.sectionTitle}>{section.section}</Text>
-              <Text style={styles.sectionSub}>{section.sectionSub}</Text>
+              {section.sectionSub ? (
+                <Text style={styles.sectionSub}>{section.sectionSub}</Text>
+              ) : null}
             </View>
             <FlatList
               data={section.items}
