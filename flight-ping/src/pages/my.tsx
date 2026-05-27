@@ -12,6 +12,7 @@ import {
 
 export const Route = createRoute('/my', {
   component: Page,
+  screenOptions: { animation: 'none' },
 });
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────

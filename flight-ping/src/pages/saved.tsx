@@ -15,6 +15,7 @@ const CARD_WIDTH = (Dimensions.get('window').width - 12 * 2 - 10) / 2;
 
 export const Route = createRoute('/saved', {
   component: Page,
+  screenOptions: { animation: 'none' },
 });
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────

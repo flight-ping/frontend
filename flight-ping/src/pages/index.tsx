@@ -11,6 +11,7 @@ import {
 
 export const Route = createRoute('/', {
   component: Page,
+  screenOptions: { animation: 'none' },
 });
 
 const COLORS = {
