@@ -1,6 +1,7 @@
 import { createRoute } from '@granite-js/react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   StyleSheet,
@@ -8,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { fetchDealSections, type DealItem } from '../api/deals';
 
 export const Route = createRoute('/', {
   component: Page,
@@ -17,17 +19,6 @@ export const Route = createRoute('/', {
 // 타입
 
 type SortTab = 'all' | 'deadline' | 'newest' | 'interested';
-
-type DealItem = {
-  id: string;
-  airline: string;
-  title: string;
-  dest: string;
-  price: string;
-  dday: string;
-  urgent: boolean;
-  color: string;
-};
 
 // 상수
 
@@ -53,89 +44,43 @@ const SORT_TABS: { key: SortTab; label: string }[] = [
   { key: 'interested', label: '관심노선' },
 ];
 
-const DEALS: DealItem[] = [
-  {
-    id: 'd1',
-    airline: '진에어',
-    title: '일본 5대 노선 특가',
-    dest: '후쿠오카, 도쿄 외 3개',
-    price: '왕복 143,900원~',
-    dday: 'D-12',
-    urgent: false,
-    color: '#2979FF',
-  },
-  {
-    id: 'd2',
-    airline: '티웨이항공',
-    title: '번쩍특가 동남아',
-    dest: '방콕, 다낭, 세부',
-    price: '왕복 139,000원~',
-    dday: 'D-2',
-    urgent: true,
-    color: '#E91E63',
-  },
-  {
-    id: 'd3',
-    airline: '에어서울',
-    title: '방방곡곡 여행 특가',
-    dest: '하노이, 오사카',
-    price: '왕복 170,000원~',
-    dday: 'D-20',
-    urgent: false,
-    color: '#00897B',
-  },
-  {
-    id: 'd4',
-    airline: '제주항공',
-    title: '여름 국내선 찜특가',
-    dest: '제주, 부산, 광주',
-    price: '왕복 57,900원~',
-    dday: 'D-8',
-    urgent: false,
-    color: '#FF6600',
-  },
-  {
-    id: 'd5',
-    airline: '에어부산',
-    title: '여름맞이 국내선 특가',
-    dest: '제주, 김포',
-    price: '왕복 49,900원~',
-    dday: 'D-1',
-    urgent: true,
-    color: '#1E88E5',
-  },
-];
-
+// 관심노선 탭은 추천 API 연동 전까지 더미 유지
 const INTERESTED_DEALS: DealItem[] = [
   {
-    id: 'rec1',
+    id: -1,
     airline: '진에어',
     title: '일본 5대 노선 특가',
     dest: '도쿄, 오사카 외 3개',
-    price: '왕복 143,900원~',
+    price: 143900,
+    priceText: '왕복 143,900원~',
     dday: 'D-12',
     urgent: false,
     color: '#2979FF',
+    flag: '🇯🇵',
   },
   {
-    id: 'rec2',
+    id: -2,
     airline: '대한항공',
     title: '도쿄 얼리버드 특가',
     dest: '도쿄 (NRT)',
-    price: '왕복 189,000원~',
+    price: 189000,
+    priceText: '왕복 189,000원~',
     dday: 'D-5',
     urgent: true,
     color: '#1565C0',
+    flag: '🇯🇵',
   },
   {
-    id: 'rec3',
+    id: -3,
     airline: '티웨이항공',
     title: '번쩍특가 동남아',
     dest: '방콕, 다낭, 세부',
-    price: '왕복 139,000원~',
+    price: 139000,
+    priceText: '왕복 139,000원~',
     dday: 'D-2',
     urgent: true,
     color: '#E91E63',
+    flag: '🇹🇭',
   },
 ];
 
@@ -156,7 +101,7 @@ function DealCard({
 }: {
   item: DealItem;
   saved: boolean;
-  onToggleSave: (id: string) => void;
+  onToggleSave: (id: number) => void;
   onPress: () => void;
 }) {
   return (
@@ -185,7 +130,7 @@ function DealCard({
         </Text>
         <View style={styles.cardBottomRow}>
           <Text style={styles.cardPrice} numberOfLines={1}>
-            {item.price}
+            {item.priceText}
           </Text>
           <View style={[styles.ddayBadge, item.urgent && styles.ddayUrgent]}>
             <Text style={[styles.ddayText, item.urgent && styles.ddayTextUrgent]}>
@@ -216,20 +161,29 @@ function EmptyState({ tab }: { tab: SortTab }) {
 function Page() {
   const navigation = Route.useNavigation();
   const [sortTab, setSortTab] = useState<SortTab>('all');
-  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [deals, setDeals] = useState<DealItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    fetchDealSections()
+      .then((sections) => setDeals(sections.flatMap((s) => s.items)))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   const displayDeals = useMemo<DealItem[]>(() => {
-    const base = sortTab === 'interested' ? INTERESTED_DEALS : DEALS;
+    const base = sortTab === 'interested' ? INTERESTED_DEALS : deals;
     if (sortTab === 'deadline') {
       return [...base].sort((a, b) => parseDday(a.dday) - parseDday(b.dday));
     }
     if (sortTab === 'newest') {
-      return [...base].sort((a, b) => b.id.localeCompare(a.id));
+      return [...base].sort((a, b) => b.id - a.id);
     }
     return base;
-  }, [sortTab]);
+  }, [sortTab, deals]);
 
-  const toggleSave = (id: string) => {
+  const toggleSave = (id: number) => {
     setSavedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -267,9 +221,14 @@ function Page() {
       </View>
 
       {/* 2열 그리드 */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      ) : null}
       <FlatList
-        data={displayDeals}
-        keyExtractor={(item) => item.id}
+        data={loading ? [] : displayDeals}
+        keyExtractor={(item) => String(item.id)}
         numColumns={2}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.gridContent}
@@ -310,9 +269,14 @@ function Page() {
 }
 
 // 스타일
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  loadingContainer: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 58,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
   // 정렬 탭
   sortBar: {
