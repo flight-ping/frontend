@@ -1,6 +1,7 @@
 import { createRoute } from '@granite-js/react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Linking,
   ScrollView,
@@ -9,33 +10,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { isoCodeToFlag, type DealDetail } from '../api/deals';
+import { fetchDealById, isoCodeToFlag, type DealDetail, type RouteItem } from '../api/deals';
 
 export const Route = createRoute('/deal-detail', {
   component: Page,
+  validateParams: (params): { dealId: number } => ({
+    dealId: Number((params as Record<string, unknown>)?.dealId ?? 0),
+  }),
 });
 
-// ─── 더미 데이터 ──────────────────────────────────────────────────────────────
-
-const DUMMY_DEAL: DealDetail = {
-  id: 1,
-  airline: '제주항공',
-  title: '1+1 할인 혜택 사이판 썸머위크',
-  departure: '인천',
-  dest: '사이판',
-  isoCode: 'MP',
-  price: 217800,
-  priceText: '왕복 217,800원~',
-  saleStart: '2026-05-20',
-  saleEnd: '2026-05-31',
-  dday: 'D-2',
-  urgent: true,
-  color: '#FF5713',
-  imageUrl: undefined,
-  bookingUrl: 'https://www.jejuair.net',
-};
-
-// ─── 상수 ─────────────────────────────────────────────────────────────────────
 
 const COLORS = {
   primary: '#2979FF',
@@ -50,20 +33,60 @@ const COLORS = {
   heart: '#FF5252',
 };
 
-// ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
+// 컴포넌트
+
+function RouteRow({ route }: { route: RouteItem }) {
+  const priceText = route.price.toLocaleString('ko-KR') + '원~';
+  return (
+    <View style={styles.routeRow}>
+      <View style={styles.routeLeft}>
+        <Text style={styles.routeText}>{route.routeText}</Text>
+        <View style={[styles.tripTypeBadge, route.tripType === '편도' && styles.tripTypeOW]}>
+          <Text style={[styles.tripTypeText, route.tripType === '편도' && styles.tripTypeOWText]}>
+            {route.tripType}
+          </Text>
+        </View>
+      </View>
+      <Text style={styles.priceValue}>{priceText}</Text>
+    </View>
+  );
+}
 
 function Page() {
   const navigation = Route.useNavigation();
+  const { dealId } = Route.useParams();
+  const [deal, setDeal] = useState<DealDetail | null>(null);
+  const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
 
-  // TODO: route params로 dealId 받아서 API 호출
-  const deal = DUMMY_DEAL;
+  useEffect(() => {
+    fetchDealById(dealId)
+      .then(setDeal)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [dealId]);
 
   const handleBooking = () => {
-    if (deal.bookingUrl) {
+    if (deal?.bookingUrl) {
       Linking.openURL(deal.bookingUrl);
     }
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  if (!deal) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={{ color: COLORS.textSecondary }}>현재 진행 중인 특가 이벤트가 없습니다.</Text>
+      </View>
+    );
+  }
 
   const flag = isoCodeToFlag(deal.isoCode);
   const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -110,10 +133,16 @@ function Page() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* 노선 + 최저가 */}
         <View style={styles.routeSection}>
-          <View style={styles.routeRow}>
-            <Text style={styles.routeText}>{flag} {deal.departure} - {deal.dest}</Text>
-            <Text style={styles.priceValue}>{deal.priceText}</Text>
-          </View>
+          {deal.routes && deal.routes.length > 0 ? (
+            deal.routes.map((route, idx) => (
+              <RouteRow key={idx} route={route} />
+            ))
+          ) : (
+            <View style={styles.routeRow}>
+              <Text style={styles.routeText}>{flag} {deal.departure} - {deal.dest}</Text>
+              <Text style={styles.priceValue}>{deal.priceText}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.divider} />
@@ -161,10 +190,16 @@ function Page() {
   );
 }
 
-// ─── 스타일 ───────────────────────────────────────────────────────────────────
+// 스타일
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
 
   // 배너
   banner: {
@@ -239,21 +274,47 @@ const styles = StyleSheet.create({
   routeSection: {
     backgroundColor: COLORS.white,
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 10,
   },
   routeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 6,
+  },
+  routeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
   },
   routeText: {
     fontSize: 14,
     color: COLORS.textPrimary,
+    flexShrink: 1,
+  },
+  tripTypeBadge: {
+    backgroundColor: COLORS.dday,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  tripTypeOW: {
+    backgroundColor: '#FFF3E0',
+  },
+  tripTypeText: {
+    fontSize: 11,
+    color: COLORS.ddayText,
+    fontWeight: '600',
+  },
+  tripTypeOWText: {
+    color: '#E65100',
   },
   priceValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.primary,
+    marginLeft: 8,
   },
 
   divider: {

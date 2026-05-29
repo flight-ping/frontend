@@ -14,6 +14,12 @@ export type DealItem = {
   imageUrl?: string;
 };
 
+export type RouteItem = {
+  routeText: string;
+  price: number;
+  tripType: string;
+};
+
 export type DealDetail = {
   id: number;
   airline: string;
@@ -30,6 +36,7 @@ export type DealDetail = {
   color: string;
   imageUrl?: string;
   bookingUrl?: string;
+  routes: RouteItem[];
 };
 
 export type DealSection = {
