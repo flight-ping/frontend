@@ -9,32 +9,33 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { isoCodeToFlag, type DealDetail } from '../api/deals';
 
 export const Route = createRoute('/deal-detail', {
   component: Page,
 });
 
-// ─── 타입 ─────────────────────────────────────────────────────────────────────
+// ─── 더미 데이터 ──────────────────────────────────────────────────────────────
 
-type DealDetail = {
-  id: string;
-  airline: string;
-  title: string;
-  departure: string;
-  dest: string;
-  flag: string;
-  price: number;
-  priceText: string;
-  saleStart: string;
-  saleEnd: string;
-  dday: string;
-  urgent: boolean;
-  color: string;
-  imageUrl?: string;
-  bookingUrl?: string;
+const DUMMY_DEAL: DealDetail = {
+  id: 1,
+  airline: '제주항공',
+  title: '1+1 할인 혜택 사이판 썸머위크',
+  departure: '인천',
+  dest: '사이판',
+  isoCode: 'MP',
+  price: 217800,
+  priceText: '왕복 217,800원~',
+  saleStart: '2026-05-20',
+  saleEnd: '2026-05-31',
+  dday: 'D-2',
+  urgent: true,
+  color: '#FF5713',
+  imageUrl: undefined,
+  bookingUrl: 'https://www.jejuair.net',
 };
 
-// ─── 더미 데이터 ──────────────────────────────────────────────────────────────
+// ─── 상수 ─────────────────────────────────────────────────────────────────────
 
 const COLORS = {
   primary: '#2979FF',
@@ -47,24 +48,6 @@ const COLORS = {
   ddayText: '#2979FF',
   border: '#EEEEEE',
   heart: '#FF5252',
-};
-
-const DUMMY_DEAL: DealDetail = {
-  id: 'd1',
-  airline: '진에어',
-  title: '일본 5대 노선 특가',
-  departure: '인천',
-  dest: '도쿄 / 오사카 / 후쿠오카 / 삿포로 / 나고야',
-  flag: '🇯🇵',
-  price: 143900,
-  priceText: '왕복 143,900원~',
-  saleStart: '2025.05.15',
-  saleEnd: '2025.05.30',
-  dday: 'D-12',
-  urgent: false,
-  color: '#2979FF',
-  imageUrl: undefined,
-  bookingUrl: 'https://www.jinair.com',
 };
 
 // ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
@@ -82,35 +65,42 @@ function Page() {
     }
   };
 
+  const flag = isoCodeToFlag(deal.isoCode);
+  const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return `${dateStr} (${DAYS[d.getDay()]})`;
+  };
+
   return (
     <View style={styles.container}>
       {/* 상단 배너 */}
-      {deal.imageUrl ? (
-        <Image
-          source={{ uri: deal.imageUrl }}
-          style={styles.bannerImage}
-          resizeMode="cover"
-        />
-      ) : (
-        <View style={[styles.bannerFallback, { backgroundColor: deal.color }]}>
-          <Text style={styles.bannerFlag}>{deal.flag}</Text>
+      <View style={[styles.banner, !deal.imageUrl && { backgroundColor: deal.color }]}>
+        {deal.imageUrl && (
+          <Image source={{ uri: deal.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        )}
+        {deal.imageUrl && <View style={styles.bannerOverlay} />}
+
+        <View style={{ flex: 1 }} />
+
+        {/* 항공사 + 제목 + D-day */}
+        <View style={styles.bannerContent}>
           <Text style={styles.bannerAirline}>{deal.airline}</Text>
           <Text style={styles.bannerTitle}>{deal.title}</Text>
+          <View style={[styles.ddayBadge, deal.urgent && styles.ddayUrgent]}>
+            <Text style={[styles.ddayText, deal.urgent && styles.ddayTextUrgent]}>
+              {deal.dday}
+            </Text>
+          </View>
         </View>
-      )}
+      </View>
 
-      {/* 뒤로가기 + 찜 버튼 (배너 위에 오버레이) */}
-      <View style={styles.headerOverlay}>
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={() => navigation.goBack()}
-        >
+      {/* 뒤로가기 + 찜 버튼 */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.headerBtnText}>←</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.headerBtn}
-          onPress={() => setSaved((prev) => !prev)}
-        >
+        <TouchableOpacity style={styles.headerBtn} onPress={() => setSaved((prev) => !prev)}>
           <Text style={[styles.heartIcon, saved && styles.heartSaved]}>
             {saved ? '♥' : '♡'}
           </Text>
@@ -118,28 +108,12 @@ function Page() {
       </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* 기본 정보 */}
-        <View style={styles.infoSection}>
-          <View style={styles.infoTop}>
-            <Text style={styles.airlineName}>{deal.airline}</Text>
-            <View style={[styles.ddayBadge, deal.urgent && styles.ddayUrgent]}>
-              <Text style={[styles.ddayText, deal.urgent && styles.ddayTextUrgent]}>
-                {deal.dday}
-              </Text>
-            </View>
+        {/* 노선 + 최저가 */}
+        <View style={styles.routeSection}>
+          <View style={styles.routeRow}>
+            <Text style={styles.routeText}>{flag} {deal.departure} - {deal.dest}</Text>
+            <Text style={styles.priceValue}>{deal.priceText}</Text>
           </View>
-          <Text style={styles.dealTitle}>{deal.title}</Text>
-          <Text style={styles.dealDest}>
-            {deal.flag} {deal.departure} → {deal.dest}
-          </Text>
-        </View>
-
-        <View style={styles.divider} />
-
-        {/* 가격 */}
-        <View style={styles.priceSection}>
-          <Text style={styles.priceLabel}>최저가</Text>
-          <Text style={styles.priceValue}>{deal.priceText}</Text>
         </View>
 
         <View style={styles.divider} />
@@ -148,12 +122,12 @@ function Page() {
         <View style={styles.periodSection}>
           <View style={styles.periodRow}>
             <Text style={styles.periodLabel}>판매 시작</Text>
-            <Text style={styles.periodValue}>{deal.saleStart}</Text>
+            <Text style={styles.periodValue}>{formatDate(deal.saleStart)}</Text>
           </View>
           <View style={styles.periodRow}>
             <Text style={styles.periodLabel}>판매 종료</Text>
             <Text style={[styles.periodValue, deal.urgent && { color: COLORS.urgent }]}>
-              {deal.saleEnd}
+              {formatDate(deal.saleEnd)}
             </Text>
           </View>
         </View>
@@ -193,33 +167,20 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
 
   // 배너
-  bannerImage: {
+  banner: {
     width: '100%',
     height: 220,
+    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    flexDirection: 'column',
+    justifyContent: 'flex-end',
   },
-  bannerFallback: {
-    width: '100%',
-    height: 220,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+  bannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.15)',
   },
-  bannerFlag: { fontSize: 48 },
-  bannerAirline: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: '500',
-  },
-  bannerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fff',
-    textAlign: 'center',
-    paddingHorizontal: 24,
-  },
-
-  // 헤더 오버레이
-  headerOverlay: {
+  headerRow: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -228,8 +189,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 48,
+    paddingTop: 12,
     paddingBottom: 12,
+    zIndex: 10,
   },
   headerBtn: {
     width: 36,
@@ -242,26 +204,21 @@ const styles = StyleSheet.create({
   headerBtnText: { fontSize: 18, color: '#fff' },
   heartIcon: { fontSize: 18, color: '#fff' },
   heartSaved: { color: COLORS.heart },
-
-  // 스크롤
-  scroll: { flex: 1 },
-
-  // 기본 정보
-  infoSection: {
-    backgroundColor: COLORS.white,
-    padding: 20,
+  bannerContent: {
+    gap: 6,
   },
-  infoTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  airlineName: {
+  bannerAirline: {
     fontSize: 13,
-    color: COLORS.textSecondary,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+  },
+  bannerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
   },
   ddayBadge: {
+    alignSelf: 'flex-start',
     backgroundColor: COLORS.dday,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -274,41 +231,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   ddayTextUrgent: { color: COLORS.urgent },
-  dealTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginBottom: 8,
+
+  // 스크롤
+  scroll: { flex: 1 },
+
+  // 기본 정보
+  routeSection: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
-  dealDest: {
+  routeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  routeText: {
     fontSize: 14,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
+    color: COLORS.textPrimary,
+  },
+  priceValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
 
   divider: {
     height: 8,
     backgroundColor: COLORS.background,
-  },
-
-  // 가격
-  priceSection: {
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  priceLabel: {
-    fontSize: 15,
-    color: COLORS.textPrimary,
-    fontWeight: '500',
-  },
-  priceValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.primary,
   },
 
   // 판매 기간
