@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Dimensions,
   FlatList,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -56,7 +57,7 @@ const INTERESTED_DEALS: DealItem[] = [
     dday: 'D-12',
     urgent: false,
     color: '#2979FF',
-    flag: '🇯🇵',
+    isoCode: 'JP',
   },
   {
     id: -2,
@@ -68,7 +69,7 @@ const INTERESTED_DEALS: DealItem[] = [
     dday: 'D-5',
     urgent: true,
     color: '#1565C0',
-    flag: '🇯🇵',
+    isoCode: 'JP',
   },
   {
     id: -3,
@@ -80,7 +81,7 @@ const INTERESTED_DEALS: DealItem[] = [
     dday: 'D-2',
     urgent: true,
     color: '#E91E63',
-    flag: '🇹🇭',
+    isoCode: 'TH',
   },
 ];
 
@@ -107,8 +108,13 @@ function DealCard({
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
       {/* 컬러 상단 */}
-      <View style={[styles.cardTop, { backgroundColor: item.color }]}>
+      <View style={[styles.cardTop, !item.imageUrl && { backgroundColor: item.color }]}>
+        {item.imageUrl && (
+          <Image source={{ uri: item.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        )}
+        {item.imageUrl && <View style={styles.cardTopOverlay} />}
         <Text style={styles.cardAirline}>{item.airline}</Text>
+        <View style={{ flex: 1 }} />
         <Text style={styles.cardTitle} numberOfLines={2}>
           {item.title}
         </Text>
@@ -240,7 +246,7 @@ function Page() {
             item={item}
             saved={savedIds.has(item.id)}
             onToggleSave={toggleSave}
-            onPress={() => navigation.navigate('/deal-detail')}
+            onPress={() => navigation.navigate('/deal-detail', { dealId: item.id })}
           />
         )}
       />
@@ -332,7 +338,12 @@ const styles = StyleSheet.create({
   cardTop: {
     height: 100,
     padding: 12,
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  cardTopOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.15)',
   },
   cardAirline: {
     fontSize: 9,
