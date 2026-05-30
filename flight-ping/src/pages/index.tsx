@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { fetchDealSections, fetchRecommendedDeals, type DealItem } from '../api/deals';
 import { fetchInterestedRoutes } from '../api/interested-routes';
+import { deleteSavedDeal, fetchSavedDeals, saveDeal } from '../api/saved';
 
 export const Route = createRoute('/', {
   component: Page,
@@ -143,6 +144,9 @@ function Page() {
       .then((sections) => setDeals(sections.flatMap((s) => s.items)))
       .catch(console.error)
       .finally(() => setLoading(false));
+    fetchSavedDeals()
+      .then((saved) => setSavedIds(new Set(saved.map((d) => d.id))))
+      .catch(console.error);
   };
 
   useEffect(() => {
@@ -171,12 +175,15 @@ function Page() {
   }, [sortTab, deals, interestedDeals]);
 
   const toggleSave = (id: number) => {
-    setSavedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    if (savedIds.has(id)) {
+      deleteSavedDeal(id)
+        .then(() => setSavedIds((prev) => { const next = new Set(prev); next.delete(id); return next; }))
+        .catch(console.error);
+    } else {
+      saveDeal(id)
+        .then(() => setSavedIds((prev) => new Set(prev).add(id)))
+        .catch(console.error);
+    }
   };
 
   const handleTabPress = (label: string) => {

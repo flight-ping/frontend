@@ -41,6 +41,19 @@ export async function apiPost<T>(path: string, body?: object): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export async function apiPostVoid(path: string, body?: object): Promise<void> {
+  const userId = await getUserId();
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': userId,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
+}
+
 export async function apiDelete(path: string): Promise<void> {
   const userId = await getUserId();
   const res = await fetch(`${BASE_URL}${path}`, {
