@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { fetchDealById, type DealDetail, type RouteItem } from '../api/deals';
+import { deleteSavedDeal, getSavedStatus, saveDeal } from '../api/saved';
 
 export const Route = createRoute('/deal-detail', {
   component: Page,
@@ -65,6 +66,7 @@ function Page() {
       .then(setDeal)
       .catch(console.error)
       .finally(() => setLoading(false));
+    getSavedStatus(dealId).then(setSaved).catch(console.error);
   }, [dealId]);
 
   const handleBooking = () => {
@@ -132,7 +134,13 @@ function Page() {
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.headerBtnText}>←</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => setSaved((prev) => !prev)}>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => {
+          if (saved) {
+            deleteSavedDeal(dealId).then(() => setSaved(false)).catch(console.error);
+          } else {
+            saveDeal(dealId).then(() => setSaved(true)).catch(console.error);
+          }
+        }}>
           <Text style={[styles.heartIcon, saved && styles.heartSaved]}>
             {saved ? '♥' : '♡'}
           </Text>

@@ -1,5 +1,5 @@
 import { createRoute } from '@granite-js/react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dimensions,
   Image,
@@ -10,6 +10,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { type DealItem } from '../api/deals';
+import { deleteSavedDeal, fetchSavedDeals } from '../api/saved';
 
 const CARD_WIDTH = (Dimensions.get('window').width - 12 * 2 - 10) / 2;
 
@@ -18,7 +20,7 @@ export const Route = createRoute('/saved', {
   screenOptions: { animation: 'none' },
 });
 
-// ─── 타입 ─────────────────────────────────────────────────────────────────────
+// 타입
 
 type TabType = 'flight' | 'deal';
 
@@ -36,16 +38,6 @@ type SavedFlight = {
   date: string;
 };
 
-type SavedDeal = {
-  id: string;
-  airline: string;
-  title: string;
-  dest: string;
-  price: string;
-  dday: string;
-  urgent: boolean;
-  color: string;
-};
 
 // 색상
 
@@ -144,44 +136,12 @@ const INITIAL_FLIGHTS: SavedFlight[] = [
   },
 ];
 
-const INITIAL_DEALS: SavedDeal[] = [
-  {
-    id: 'd1',
-    airline: '에어부산',
-    title: '여름맞이 국내선 특가',
-    dest: '제주, 김포',
-    price: '왕복 49,900원~',
-    dday: 'D-1',
-    urgent: true,
-    color: '#1E88E5',
-  },
-  {
-    id: 'd2',
-    airline: '티웨이항공',
-    title: '번쩍특가 동남아',
-    dest: '방콕, 다낭, 세부',
-    price: '왕복 139,000원~',
-    dday: 'D-2',
-    urgent: true,
-    color: '#E91E63',
-  },
-  {
-    id: 'd3',
-    airline: '진에어',
-    title: '일본 5대 노선 특가',
-    dest: '후쿠오카, 도쿄 외 3개',
-    price: '왕복 143,900원~',
-    dday: 'D-12',
-    urgent: false,
-    color: '#2979FF',
-  },
-];
-
 function parseDday(dday: string): number {
-  return parseInt(dday.replace('D-', ''), 10);
+  const match = dday.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
 }
 
-// ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
+// 컴포넌트
 
 function FlightCard({
   item,
@@ -247,14 +207,18 @@ function DealCard({
   onRemove,
   onPress,
 }: {
-  item: SavedDeal;
-  onRemove: (id: string) => void;
+  item: DealItem;
+  onRemove: (id: number) => void;
   onPress: () => void;
 }) {
   return (
     <TouchableOpacity style={styles.dealCard} onPress={onPress} activeOpacity={0.85}>
       {/* 컬러 상단 */}
-      <View style={[styles.dealTop, { backgroundColor: item.color }]}>
+      <View style={[styles.dealTop, !item.imageUrl && { backgroundColor: item.color }]}>
+        {item.imageUrl && (
+          <Image source={{ uri: item.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        )}
+        {item.imageUrl && <View style={styles.dealTopOverlay} />}
         <Text style={styles.dealTopAirline}>{item.airline}</Text>
         <Text style={styles.dealTopTitle} numberOfLines={2}>{item.title}</Text>
         <TouchableOpacity
@@ -269,7 +233,7 @@ function DealCard({
       <View style={styles.dealBottom}>
         <Text style={styles.dealBottomDest} numberOfLines={1}>{item.dest}</Text>
         <View style={styles.dealBottomRow}>
-          <Text style={styles.dealBottomPrice} numberOfLines={1}>{item.price}</Text>
+          <Text style={styles.dealBottomPrice} numberOfLines={1}>{item.priceText}</Text>
           <View style={[styles.dealDdayBadge, item.urgent && styles.dealDdayBadgeUrgent]}>
             <Text style={[styles.dealDdayText, item.urgent && styles.dealDdayTextUrgent]}>
               {item.dday}
@@ -294,8 +258,17 @@ function Page() {
   const navigation = Route.useNavigation();
   const [activeTab, setActiveTab] = useState<TabType>('flight');
   const [flights, setFlights] = useState<SavedFlight[]>(INITIAL_FLIGHTS);
-  const [deals, setDeals] = useState<SavedDeal[]>(INITIAL_DEALS);
+  const [deals, setDeals] = useState<DealItem[]>([]);
   const [selectedDest, setSelectedDest] = useState<string>('전체');
+
+  const loadSavedDeals = () => {
+    fetchSavedDeals().then(setDeals).catch(console.error);
+  };
+
+  useEffect(() => {
+    loadSavedDeals();
+    return navigation.addListener('focus', loadSavedDeals);
+  }, [navigation]);
 
   // 목적지 필터 옵션
   const destinations = ['전체', ...Array.from(new Set(flights.map((f) => f.destination)))];
@@ -315,8 +288,10 @@ function Page() {
     setFlights((prev) => prev.filter((f) => f.id !== id));
   };
 
-  const handleRemoveDeal = (id: string) => {
-    setDeals((prev) => prev.filter((d) => d.id !== id));
+  const handleRemoveDeal = (id: number) => {
+    deleteSavedDeal(id)
+      .then(() => setDeals((prev) => prev.filter((d) => d.id !== id)))
+      .catch(console.error);
   };
 
   const handleTabPress = (label: string) => {
@@ -410,7 +385,7 @@ function Page() {
                   key={item.id}
                   item={item}
                   onRemove={handleRemoveDeal}
-                  onPress={() => navigation.navigate('/deal-detail')}
+                  onPress={() => navigation.navigate('/deal-detail', { dealId: item.id })}
                 />
               ))}
             </View>
@@ -442,7 +417,7 @@ function Page() {
   );
 }
 
-// ─── 스타일 ───────────────────────────────────────────────────────────────────
+// 스타일
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
@@ -628,6 +603,11 @@ const styles = StyleSheet.create({
     height: 96,
     padding: 12,
     justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  dealTopOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.15)',
   },
   dealTopAirline: {
     fontSize: 9,
