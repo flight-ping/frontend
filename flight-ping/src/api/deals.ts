@@ -11,6 +11,7 @@ export type DealItem = {
   urgent: boolean;
   color: string;
   imageUrl?: string;
+  saleStart: string;
 };
 
 export type RouteItem = {
