@@ -57,7 +57,6 @@ const INTERESTED_DEALS: DealItem[] = [
     dday: 'D-12',
     urgent: false,
     color: '#2979FF',
-    isoCode: 'JP',
   },
   {
     id: -2,
@@ -69,7 +68,6 @@ const INTERESTED_DEALS: DealItem[] = [
     dday: 'D-5',
     urgent: true,
     color: '#1565C0',
-    isoCode: 'JP',
   },
   {
     id: -3,
@@ -81,7 +79,6 @@ const INTERESTED_DEALS: DealItem[] = [
     dday: 'D-2',
     urgent: true,
     color: '#E91E63',
-    isoCode: 'TH',
   },
 ];
 

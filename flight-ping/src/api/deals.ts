@@ -10,7 +10,6 @@ export type DealItem = {
   dday: string;
   urgent: boolean;
   color: string;
-  isoCode: string;
   imageUrl?: string;
 };
 
@@ -26,7 +25,6 @@ export type DealDetail = {
   title: string;
   departure: string;
   dest: string;
-  isoCode: string;
   price: number;
   priceText: string;
   saleStart: string;
