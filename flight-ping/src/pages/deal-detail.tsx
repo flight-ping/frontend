@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { fetchDealById, isoCodeToFlag, type DealDetail, type RouteItem } from '../api/deals';
+import { fetchDealById, type DealDetail, type RouteItem } from '../api/deals';
 
 export const Route = createRoute('/deal-detail', {
   component: Page,
@@ -58,6 +58,7 @@ function Page() {
   const [deal, setDeal] = useState<DealDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [selectedDep, setSelectedDep] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDealById(dealId)
@@ -88,7 +89,15 @@ function Page() {
     );
   }
 
-  const flag = isoCodeToFlag(deal.isoCode);
+  const getDep = (routeText: string): string => {
+    const parts = routeText.split(/\s*↔\s*|\s*-\s*/);
+    return (parts[0] ?? '').trim();
+  };
+  const uniqueDeps = [...new Set(deal.routes.map((r) => getDep(r.routeText)))];
+  const filteredRoutes = selectedDep
+    ? deal.routes.filter((r) => getDep(r.routeText) === selectedDep)
+    : deal.routes;
+
   const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -131,15 +140,38 @@ function Page() {
       </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* 노선 필터 버튼 */}
+        {deal.routes && deal.routes.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterContainer}>
+            <TouchableOpacity
+              style={[styles.filterBtn, selectedDep === null && styles.filterBtnActive]}
+              onPress={() => setSelectedDep(null)}
+            >
+              <Text style={[styles.filterBtnText, selectedDep === null && styles.filterBtnTextActive]}>전체</Text>
+            </TouchableOpacity>
+            {uniqueDeps.map((dep) => (
+              <TouchableOpacity
+                key={dep}
+                style={[styles.filterBtn, selectedDep === dep && styles.filterBtnActive]}
+                onPress={() => setSelectedDep(dep)}
+              >
+                <Text style={[styles.filterBtnText, selectedDep === dep && styles.filterBtnTextActive]}>
+                  {dep}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
         {/* 노선 + 최저가 */}
         <View style={styles.routeSection}>
           {deal.routes && deal.routes.length > 0 ? (
-            deal.routes.map((route, idx) => (
+            filteredRoutes.map((route, idx) => (
               <RouteRow key={idx} route={route} />
             ))
           ) : (
             <View style={styles.routeRow}>
-              <Text style={styles.routeText}>{flag} {deal.departure} - {deal.dest}</Text>
+              <Text style={styles.routeText}>{deal.departure} - {deal.dest}</Text>
               <Text style={styles.priceValue}>{deal.priceText}</Text>
             </View>
           )}
@@ -269,6 +301,38 @@ const styles = StyleSheet.create({
 
   // 스크롤
   scroll: { flex: 1 },
+
+  // 노선 필터
+  filterScroll: {
+    backgroundColor: COLORS.white,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  filterBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
+  },
+  filterBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  filterBtnText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  filterBtnTextActive: {
+    color: COLORS.white,
+    fontWeight: '600',
+  },
 
   // 기본 정보
   routeSection: {
