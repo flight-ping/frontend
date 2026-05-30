@@ -169,7 +169,7 @@ function Page() {
 
   const DEPARTURE_ORDER = ['ICN', 'GMP', 'PUS', 'CJJ', 'TAE', 'CJU'];
   const koreanAirports: AirportOption[] = [
-    ...DEPARTURE_ORDER.map((code) => departureAirports.find((a) => a.code === code)).filter(Boolean).map(toOption),
+    ...DEPARTURE_ORDER.map((code) => departureAirports.find((a) => a.code === code)).filter((a): a is AirportItem => a !== undefined).map(toOption),
     ...departureAirports.filter((a) => !DEPARTURE_ORDER.includes(a.code)).map(toOption),
   ];
 
