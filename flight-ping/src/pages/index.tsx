@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { fetchDealSections, type DealItem } from '../api/deals';
+import { fetchDealSections, fetchRecommendedDeals, type DealItem } from '../api/deals';
 
 export const Route = createRoute('/', {
   component: Page,
@@ -19,7 +19,7 @@ export const Route = createRoute('/', {
 
 // 타입
 
-type SortTab = 'all' | 'deadline' | 'newest' | 'interested';
+type SortTab = 'deadline' | 'newest' | 'interested';
 
 // 상수
 
@@ -39,54 +39,17 @@ const COLORS = {
 };
 
 const SORT_TABS: { key: SortTab; label: string }[] = [
-  { key: 'all', label: '전체' },
   { key: 'deadline', label: '마감임박순' },
   { key: 'newest', label: '최신순' },
   { key: 'interested', label: '관심노선' },
 ];
 
-// 관심노선 탭은 추천 API 연동 전까지 더미 유지
-const INTERESTED_DEALS: DealItem[] = [
-  {
-    id: -1,
-    airline: '진에어',
-    title: '일본 5대 노선 특가',
-    dest: '도쿄, 오사카 외 3개',
-    price: 143900,
-    priceText: '왕복 143,900원~',
-    dday: 'D-12',
-    urgent: false,
-    color: '#2979FF',
-  },
-  {
-    id: -2,
-    airline: '대한항공',
-    title: '도쿄 얼리버드 특가',
-    dest: '도쿄 (NRT)',
-    price: 189000,
-    priceText: '왕복 189,000원~',
-    dday: 'D-5',
-    urgent: true,
-    color: '#1565C0',
-  },
-  {
-    id: -3,
-    airline: '티웨이항공',
-    title: '번쩍특가 동남아',
-    dest: '방콕, 다낭, 세부',
-    price: 139000,
-    priceText: '왕복 139,000원~',
-    dday: 'D-2',
-    urgent: true,
-    color: '#E91E63',
-  },
-];
 
 // 유틸
 
 function parseDday(dday: string): number {
   const match = dday.match(/\d+/);
-  return match ? parseInt(match[0], 10) : 999;
+  return match ? parseInt(match[0], 10) : 0;
 }
 
 // 컴포넌트
@@ -163,28 +126,42 @@ function EmptyState({ tab }: { tab: SortTab }) {
 
 function Page() {
   const navigation = Route.useNavigation();
-  const [sortTab, setSortTab] = useState<SortTab>('all');
+  const [sortTab, setSortTab] = useState<SortTab>('deadline');
   const [deals, setDeals] = useState<DealItem[]>([]);
+  const [interestedDeals, setInterestedDeals] = useState<DealItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
 
-  useEffect(() => {
+  const loadDeals = () => {
+    setLoading(true);
+    setSortTab('deadline');
     fetchDealSections()
       .then((sections) => setDeals(sections.flatMap((s) => s.items)))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => {
+    loadDeals();
+    return navigation.addListener('focus', loadDeals);
+  }, [navigation]);
+
+  useEffect(() => {
+    if (sortTab === 'interested') {
+      fetchRecommendedDeals().then(setInterestedDeals).catch(console.error);
+    }
+  }, [sortTab]);
 
   const displayDeals = useMemo<DealItem[]>(() => {
-    const base = sortTab === 'interested' ? INTERESTED_DEALS : deals;
+    const base = sortTab === 'interested' ? interestedDeals : deals;
     if (sortTab === 'deadline') {
       return [...base].sort((a, b) => parseDday(a.dday) - parseDday(b.dday));
     }
     if (sortTab === 'newest') {
-      return [...base].sort((a, b) => b.id - a.id);
+      return [...base].sort((a, b) => new Date(b.saleStart).getTime() - new Date(a.saleStart).getTime());
     }
     return base;
-  }, [sortTab, deals]);
+  }, [sortTab, deals, interestedDeals]);
 
   const toggleSave = (id: number) => {
     setSavedIds((prev) => {

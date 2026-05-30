@@ -66,3 +66,8 @@ export async function fetchDealSections(): Promise<DealSection[]> {
 export async function fetchDealById(dealId: number): Promise<DealDetail> {
   return apiGet<DealDetail>(`/api/v1/deals/${dealId}`);
 }
+
+export async function fetchRecommendedDeals(): Promise<DealItem[]> {
+  const res = await apiGet<{ routes: { departure: string; dest: string; deals: DealItem[] }[] }>('/api/v1/recommendations');
+  return res.routes.flatMap((r) => r.deals);
+}
