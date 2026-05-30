@@ -1,7 +1,11 @@
 import { createRoute } from '@granite-js/react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
+  Animated,
   Modal,
+  PanResponder,
+  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -9,40 +13,38 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { fetchAirports, fetchDepartureAirports, fetchDestinations, type AirportItem } from '../api/airports';
+import {
+  addInterestedRoute,
+  deleteInterestedRoute,
+  fetchInterestedRoutes,
+  type InterestedRouteItem,
+} from '../api/interested-routes';
 
 export const Route = createRoute('/my', {
   component: Page,
   screenOptions: { animation: 'none' },
 });
 
-// ─── 타입 ─────────────────────────────────────────────────────────────────────
-
-type Airport =
-  | '인천'
-  | '김포'
-  | '부산'
-  | '대구'
-  | '제주'
-  | '청주'
-  | '광주'
-  | '무안'
-  | '양양';
+// 타입
 
 type AddStep = 'departure' | 'dest';
-
-type InterestedRoute = {
-  id: string;
-  departure: Airport;
-  dest: string;
-  flag: string;
-};
 
 type NotificationSettings = {
   dealAlert: boolean;
   urgentAlert: boolean;
 };
 
-// ─── 더미 데이터 ──────────────────────────────────────────────────────────────
+type AirportOption = {
+  code: string;
+  city: string;
+  flag: string;
+  isoCode: string;
+  countryName: string;
+  continent: string;
+};
+
+// 상수
 
 const COLORS = {
   primary: '#2979FF',
@@ -54,55 +56,26 @@ const COLORS = {
   overlay: 'rgba(0,0,0,0.4)',
 };
 
-const AIRPORTS: Airport[] = [
-  '인천', '김포', '부산', '대구', '제주', '청주', '광주', '무안', '양양',
-];
-
-const DESTINATIONS = [
-  '도쿄', '오사카', '후쿠오카', '삿포로',
-  '방콕', '세부', '마닐라', '하노이', '다낭', '호치민',
-  '싱가포르', '홍콩', '대만(타이베이)',
-  '제주', '부산(김해)', '서울(김포)',
-];
-
-const DEST_FLAGS: Record<string, string> = {
-  '도쿄': '🇯🇵',
-  '오사카': '🇯🇵',
-  '후쿠오카': '🇯🇵',
-  '삿포로': '🇯🇵',
-  '방콕': '🇹🇭',
-  '세부': '🇵🇭',
-  '마닐라': '🇵🇭',
-  '하노이': '🇻🇳',
-  '다낭': '🇻🇳',
-  '호치민': '🇻🇳',
-  '싱가포르': '🇸🇬',
-  '홍콩': '🇭🇰',
-  '대만(타이베이)': '🇹🇼',
-  '제주': '🇰🇷',
-  '부산(김해)': '🇰🇷',
-  '서울(김포)': '🇰🇷',
-};
-
-const INITIAL_ROUTES: InterestedRoute[] = [
-  { id: 'ir1', departure: '인천', dest: '도쿄', flag: '🇯🇵' },
-  { id: 'ir2', departure: '인천', dest: '방콕', flag: '🇹🇭' },
-];
-
-// ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
+// 컴포넌트
 
 function RouteItem({
   route,
   onRemove,
+  airportMap,
 }: {
-  route: InterestedRoute;
-  onRemove: (id: string) => void;
+  route: InterestedRouteItem;
+  onRemove: (id: number) => void;
+  airportMap: Record<string, AirportOption>;
 }) {
+  const destAirport = airportMap[route.dest];
+  const depCity = airportMap[route.departure]?.city ?? route.departure;
+  const destCity = destAirport?.city ?? route.dest;
+  const flag = destAirport?.flag ?? '✈️';
   return (
     <View style={styles.routeItem}>
-      <Text style={styles.routeFlag}>{route.flag}</Text>
+      <Text style={styles.routeFlag}>{flag}</Text>
       <Text style={styles.routeItemText}>
-        {route.departure} → {route.dest}
+        {depCity} → {destCity}
       </Text>
       <TouchableOpacity
         onPress={() => onRemove(route.id)}
@@ -114,38 +87,138 @@ function RouteItem({
   );
 }
 
+function toOption(a: AirportItem): AirportOption {
+  return {
+    code: a.code,
+    city: a.city,
+    flag: a.flag,
+    isoCode: a.isoCode,
+    countryName: a.countryName,
+    continent: a.continent,
+  };
+}
+
 function Page() {
   const navigation = Route.useNavigation();
-  const [interestedRoutes, setInterestedRoutes] = useState<InterestedRoute[]>(INITIAL_ROUTES);
+  const [airports, setAirports] = useState<AirportItem[]>([]);
+  const [departureAirports, setDepartureAirports] = useState<AirportItem[]>([]);
+  const [destinations, setDestinations] = useState<AirportOption[]>([]);
+  const [interestedRoutes, setInterestedRoutes] = useState<InterestedRouteItem[]>([]);
   const [notifications, setNotifications] = useState<NotificationSettings>({
     dealAlert: true,
     urgentAlert: true,
   });
   const [addStep, setAddStep] = useState<AddStep | null>(null);
-  const [pendingDeparture, setPendingDeparture] = useState<Airport | null>(null);
+  const [pendingDeparture, setPendingDeparture] = useState<string | null>(null);
+  const [selectedContinent, setSelectedContinent] = useState<string | null>(null);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
 
-  const modalOptions: string[] = addStep === 'departure' ? AIRPORTS : DESTINATIONS;
+  const translateY = useRef(new Animated.Value(0)).current;
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const prevAddStepRef = useRef<AddStep | null>(null);
+  const closeModalRef = useRef<() => void>(() => {});
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 5,
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) {
+          translateY.setValue(gs.dy);
+          overlayOpacity.setValue(Math.max(0, 1 - gs.dy / 500));
+        }
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > 100) {
+          Animated.parallel([
+            Animated.timing(translateY, { toValue: 700, duration: 220, useNativeDriver: true }),
+            Animated.timing(overlayOpacity, { toValue: 0, duration: 220, useNativeDriver: true }),
+          ]).start(() => {
+            closeModalRef.current();
+          });
+        } else {
+          Animated.parallel([
+            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
+            Animated.timing(overlayOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
+          ]).start();
+        }
+      },
+    })
+  ).current;
+
+  useEffect(() => {
+    fetchAirports().then(setAirports).catch(console.error);
+    fetchDepartureAirports().then(setDepartureAirports).catch(console.error);
+    fetchInterestedRoutes().then(setInterestedRoutes).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (addStep !== null && prevAddStepRef.current === null) {
+      translateY.setValue(600);
+      overlayOpacity.setValue(0);
+      Animated.parallel([
+        Animated.timing(translateY, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(overlayOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]).start();
+    }
+    prevAddStepRef.current = addStep;
+  }, [addStep]);
+
+  const airportMap: Record<string, AirportOption> = Object.fromEntries(
+    airports.map((a) => [a.code, toOption(a)])
+  );
+
+  const DEPARTURE_ORDER = ['ICN', 'GMP', 'PUS', 'CJJ', 'TAE', 'CJU'];
+  const koreanAirports: AirportOption[] = [
+    ...DEPARTURE_ORDER.map((code) => departureAirports.find((a) => a.code === code)).filter(Boolean).map(toOption),
+    ...departureAirports.filter((a) => !DEPARTURE_ORDER.includes(a.code)).map(toOption),
+  ];
+
+  // 도착지: 대륙 → { isoCode → AirportOption[] }, 국내 최상단
+  const destGroupedRaw = destinations.reduce<Record<string, Record<string, AirportOption[]>>>(
+    (acc, a) => {
+      const cont = a.continent || '기타';
+      acc[cont] ??= {};
+      (acc[cont][a.isoCode] ??= []).push(a);
+      return acc;
+    },
+    {}
+  );
+  const destGrouped = Object.fromEntries(
+    Object.entries(destGroupedRaw).sort(([a]) => (a === '국내' ? -1 : 1))
+  );
+
+  const depCityLabel = pendingDeparture ? (airportMap[pendingDeparture]?.city ?? pendingDeparture) : '';
   const modalTitle =
-    addStep === 'departure' ? '출발지 선택' : `${pendingDeparture ?? ''} → 도착지 선택`;
+    addStep === 'departure' ? '출발지 선택' : `${depCityLabel} → 도착지 선택`;
 
-  const handleModalSelect = (option: string) => {
+  const handleContinentPress = (continent: string) => {
+    setSelectedContinent(continent);
+    setSelectedCountry(null);
+  };
+
+  const handleCountryPress = (isoCode: string) => {
+    setSelectedCountry(isoCode);
+  };
+
+  const handleModalSelect = (option: AirportOption) => {
     if (addStep === 'departure') {
-      setPendingDeparture(option as Airport);
+      setPendingDeparture(option.code);
+      fetchDestinations(option.code)
+        .then((list) => setDestinations(list.map(toOption)))
+        .catch(console.error);
+      setSelectedContinent(null);
+      setSelectedCountry(null);
       setAddStep('dest');
     } else {
       if (pendingDeparture !== null) {
-        const flag = DEST_FLAGS[option] ?? '✈️';
-        const isDuplicate = interestedRoutes.some(
-          (r) => r.departure === pendingDeparture && r.dest === option,
-        );
-        if (!isDuplicate) {
-          setInterestedRoutes((prev) => [
-            ...prev,
-            { id: `ir-${Date.now()}`, departure: pendingDeparture, dest: option, flag },
-          ]);
-        }
+        addInterestedRoute(pendingDeparture, option.code)
+          .then((created) => {
+            setInterestedRoutes((prev) => [...prev, created]);
+          })
+          .catch(console.error);
       }
       setPendingDeparture(null);
+      setDestinations([]);
       setAddStep(null);
     }
   };
@@ -153,10 +226,27 @@ function Page() {
   const handleModalClose = () => {
     setAddStep(null);
     setPendingDeparture(null);
+    setDestinations([]);
+    setSelectedContinent(null);
+    setSelectedCountry(null);
   };
+  closeModalRef.current = handleModalClose;
 
-  const handleRemoveRoute = (id: string) => {
-    setInterestedRoutes((prev) => prev.filter((r) => r.id !== id));
+  const handleRemoveRoute = (id: number) => {
+    Alert.alert('노선 삭제', '관심 노선을 삭제하시겠어요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => {
+          deleteInterestedRoute(id)
+            .then(() => {
+              setInterestedRoutes((prev) => prev.filter((r) => r.id !== id));
+            })
+            .catch(console.error);
+        },
+      },
+    ]);
   };
 
   const handleTabPress = (label: string) => {
@@ -167,7 +257,7 @@ function Page() {
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={true}>
         {/* 관심 노선 섹션 */}
         <View style={styles.sectionLabel}>
           <Text style={styles.sectionLabelText}>관심 노선</Text>
@@ -179,7 +269,7 @@ function Page() {
           {interestedRoutes.map((route, index) => (
             <React.Fragment key={route.id}>
               {index > 0 && <View style={styles.divider} />}
-              <RouteItem route={route} onRemove={handleRemoveRoute} />
+              <RouteItem route={route} onRemove={handleRemoveRoute} airportMap={airportMap} />
             </React.Fragment>
           ))}
           <View style={styles.divider} />
@@ -240,30 +330,88 @@ function Page() {
       <Modal
         visible={addStep !== null}
         transparent
-        animationType="slide"
+        animationType="none"
         onRequestClose={handleModalClose}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={handleModalClose}
-        >
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>{modalTitle}</Text>
-            <ScrollView>
-              {modalOptions.map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={styles.pickerOption}
-                  onPress={() => handleModalSelect(option)}
-                >
-                  <Text style={styles.pickerOptionText}>{option}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
+        <View style={styles.modalOverlay}>
+          <Animated.View
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: COLORS.overlay, opacity: overlayOpacity }]}
+            pointerEvents="none"
+          />
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={handleModalClose} />
+          <Animated.View style={[styles.modalSheet, { transform: [{ translateY }] }]}>
+            <View style={styles.modalDragArea} {...panResponder.panHandlers}>
+              <View style={styles.modalHandle} />
+              <Text style={styles.modalTitle}>{modalTitle}</Text>
+            </View>
+            {addStep === 'departure' ? (
+              // 출발지: 공항 목록
+              <ScrollView style={{ flex: 1 }}>
+                {koreanAirports.map((option) => (
+                  <Pressable
+                    key={option.code}
+                    style={({ pressed }) => [styles.airportRow, pressed && styles.selectedRow]}
+                    onPress={() => handleModalSelect(option)}
+                  >
+                    <Text style={styles.airportText}>{option.city}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : (
+              // 도착지: 대륙 | 나라 | 공항 3단 패널
+              <View style={styles.panelContainer}>
+                {/* 대륙 */}
+                <ScrollView style={styles.panel} showsVerticalScrollIndicator={true}>
+                  {Object.keys(destGrouped).map((continent) => (
+                    <Pressable
+                      key={continent}
+                      style={({ pressed }) => [
+                        styles.panelRow,
+                        (pressed || selectedContinent === continent) && styles.selectedRow,
+                      ]}
+                      onPress={() => handleContinentPress(continent)}
+                    >
+                      <Text style={[styles.panelText, selectedContinent === continent && styles.selectedText]}>
+                        {continent}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+
+                {/* 나라 */}
+                <ScrollView style={[styles.panel, styles.panelBorder]} showsVerticalScrollIndicator={true}>
+                  {Object.entries(destGrouped[selectedContinent ?? ''] ?? {}).map(([isoCode, airports]) => (
+                    <Pressable
+                      key={isoCode}
+                      style={({ pressed }) => [
+                        styles.panelRow,
+                        (pressed || selectedCountry === isoCode) && styles.selectedRow,
+                      ]}
+                      onPress={() => handleCountryPress(isoCode)}
+                    >
+                      <Text style={[styles.panelText, selectedCountry === isoCode && styles.selectedText]}>
+                        {airports[0]?.countryName || isoCode}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+
+                {/* 공항 */}
+                <ScrollView style={[styles.panel, styles.panelBorder]} showsVerticalScrollIndicator={true}>
+                  {(destGrouped[selectedContinent ?? '']?.[selectedCountry ?? ''] ?? []).map((option) => (
+                    <TouchableOpacity
+                      key={option.code}
+                      style={styles.panelRow}
+                      onPress={() => handleModalSelect(option)}
+                    >
+                      <Text style={styles.panelText}>{option.city}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </Animated.View>
+        </View>
       </Modal>
 
       {/* 탭바 */}
@@ -289,7 +437,7 @@ function Page() {
   );
 }
 
-// ─── 스타일 ───────────────────────────────────────────────────────────────────
+// 스타일
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
@@ -374,16 +522,18 @@ const styles = StyleSheet.create({
   // 노선 추가 모달
   modalOverlay: {
     flex: 1,
-    backgroundColor: COLORS.overlay,
     justifyContent: 'flex-end',
   },
   modalSheet: {
     backgroundColor: COLORS.white,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingTop: 12,
     paddingBottom: 40,
-    maxHeight: '60%',
+    height: '70%',
+  },
+  modalDragArea: {
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   modalHandle: {
     width: 36,
@@ -400,14 +550,57 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 8,
   },
-  pickerOption: {
-    paddingHorizontal: 20,
+
+  // 3단 패널
+  panelContainer: {
+    flexDirection: 'row',
+    flex: 1,
+  },
+  panel: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+  },
+  panelBorder: {
+    borderLeftWidth: 0.5,
+    borderLeftColor: COLORS.border,
+  },
+  panelRow: {
+    paddingHorizontal: 12,
     paddingVertical: 14,
     borderBottomWidth: 0.5,
     borderBottomColor: COLORS.border,
   },
-  pickerOptionText: {
-    fontSize: 15,
+  panelText: {
+    fontSize: 13,
+    color: COLORS.textPrimary,
+  },
+  selectedRow: {
+    backgroundColor: '#EEF4FF',
+  },
+  selectedText: {
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  continentRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.background,
+  },
+  continentText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  airportRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+    borderBottomColor: COLORS.border,
+  },
+  airportText: {
+    fontSize: 14,
     color: COLORS.textPrimary,
   },
 
