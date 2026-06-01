@@ -572,7 +572,7 @@ function Page() {
             <Text style={styles.modalTitle}>귀국일 선택</Text>
             <CalendarPicker
               selectedDate={returnDate ?? selectedDate}
-              minDate={(() => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); return d; })()}
+              minDate={selectedDate}
               onSelect={(date) => { setReturnDate(date); setPickerTarget(null); }}
             />
             <View style={{ height: 20 }} />
