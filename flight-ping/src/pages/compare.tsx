@@ -1,36 +1,38 @@
 import { createRoute } from '@granite-js/react-native';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { fetchDepartureAirports, fetchDestinations, type AirportItem } from '../api/airports';
+import { fetchRouteDeals, type DealItem } from '../api/deals';
 
 export const Route = createRoute('/compare', {
   component: Page,
   screenOptions: { animation: 'none' },
 });
 
-// ─── 타입 ─────────────────────────────────────────────────────────────────────
+// 타입
 
-type Airport =
-  | '인천'
-  | '김포'
-  | '부산'
-  | '대구'
-  | '제주'
-  | '청주'
-  | '광주'
-  | '무안'
-  | '양양';
+type AirportOption = {
+  code: string;
+  city: string;
+  flag: string;
+  isoCode: string;
+  countryName: string;
+  continent: string;
+};
 
-type PickerTarget = 'departure' | 'dest' | 'date';
+type TripType = 'oneway' | 'roundtrip';
+type PickerTarget = 'departure' | 'dest' | 'date' | 'date-return';
 
-// ─── 날짜 유틸 ────────────────────────────────────────────────────────────────
+// 날짜 유틸
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -61,28 +63,7 @@ function formatDateApi(date: Date): string {
 
 const DATE_LIST = getDateList(60);
 
-type FlightEvent = {
-  id: string;
-  airline: string;
-  title: string;
-  saleStart: string;
-  saleEnd: string;
-  price: number;
-  dday: string;
-  urgent: boolean;
-};
-
-type RouteItem = {
-  id: string;
-  departure: Airport;
-  dest: string;
-  country: string;
-  flag: string;
-  minPrice: number;
-  events: FlightEvent[];
-};
-
-// ─── 더미 데이터 ──────────────────────────────────────────────────────────────
+// 상수
 
 const COLORS = {
   primary: '#2979FF',
@@ -98,446 +79,37 @@ const COLORS = {
   overlay: 'rgba(0,0,0,0.4)',
 };
 
-const AIRPORTS: Airport[] = [
-  '인천', '김포', '부산', '대구', '제주', '청주', '광주', '무안', '양양',
-];
+const DEPARTURE_ORDER = ['ICN', 'GMP', 'PUS', 'CJJ', 'TAE', 'CJU'];
 
-const ALL_ROUTES: RouteItem[] = [
-  // ── 인천 출발 ────────────────────────────────────────────────────────────────
-  {
-    id: 'icn-nrt',
-    departure: '인천',
-    dest: '도쿄',
-    country: '일본',
-    flag: '🇯🇵',
-    minPrice: 143900,
-    events: [
-      {
-        id: 'e-icn-nrt-1',
-        airline: '진에어',
-        title: '일본 5대 노선 특가',
-        saleStart: '2025.05.15',
-        saleEnd: '2025.05.30',
-        price: 143900,
-        dday: 'D-12',
-        urgent: false,
-      },
-      {
-        id: 'e-icn-nrt-2',
-        airline: '대한항공',
-        title: '여름 성수기 특가',
-        saleStart: '2025.05.20',
-        saleEnd: '2025.06.01',
-        price: 189000,
-        dday: 'D-20',
-        urgent: false,
-      },
-    ],
-  },
-  {
-    id: 'icn-bkk',
-    departure: '인천',
-    dest: '방콕',
-    country: '태국',
-    flag: '🇹🇭',
-    minPrice: 139000,
-    events: [
-      {
-        id: 'e-icn-bkk-1',
-        airline: '티웨이항공',
-        title: '번쩍특가 동남아',
-        saleStart: '2025.05.18',
-        saleEnd: '2025.05.20',
-        price: 139000,
-        dday: 'D-2',
-        urgent: true,
-      },
-    ],
-  },
-  {
-    id: 'icn-fuk',
-    departure: '인천',
-    dest: '후쿠오카',
-    country: '일본',
-    flag: '🇯🇵',
-    minPrice: 168000,
-    events: [
-      {
-        id: 'e-icn-fuk-1',
-        airline: '에어서울',
-        title: '방방곡곡 여행 특가',
-        saleStart: '2025.05.10',
-        saleEnd: '2025.05.28',
-        price: 168000,
-        dday: 'D-8',
-        urgent: false,
-      },
-    ],
-  },
-  {
-    id: 'icn-han',
-    departure: '인천',
-    dest: '하노이',
-    country: '베트남',
-    flag: '🇻🇳',
-    minPrice: 175000,
-    events: [
-      {
-        id: 'e-icn-han-1',
-        airline: '베트남항공',
-        title: '하노이 특가',
-        saleStart: '2025.05.12',
-        saleEnd: '2025.05.25',
-        price: 175000,
-        dday: 'D-5',
-        urgent: false,
-      },
-      {
-        id: 'e-icn-han-2',
-        airline: '비엣젯항공',
-        title: '베트남 이벤트 특가',
-        saleStart: '2025.05.14',
-        saleEnd: '2025.05.28',
-        price: 183000,
-        dday: 'D-8',
-        urgent: false,
-      },
-    ],
-  },
-  {
-    id: 'icn-ceb',
-    departure: '인천',
-    dest: '세부',
-    country: '필리핀',
-    flag: '🇵🇭',
-    minPrice: 209000,
-    events: [
-      {
-        id: 'e-icn-ceb-1',
-        airline: '필리핀항공',
-        title: '세부 여름 특가',
-        saleStart: '2025.05.19',
-        saleEnd: '2025.05.19',
-        price: 209000,
-        dday: 'D-1',
-        urgent: true,
-      },
-    ],
-  },
-  // ── 김포 출발 ────────────────────────────────────────────────────────────────
-  {
-    id: 'gmp-jeju',
-    departure: '김포',
-    dest: '제주',
-    country: '대한민국',
-    flag: '🇰🇷',
-    minPrice: 49900,
-    events: [
-      {
-        id: 'e-gmp-jeju-1',
-        airline: '에어부산',
-        title: '여름맞이 국내선 특가',
-        saleStart: '2025.05.18',
-        saleEnd: '2025.05.19',
-        price: 49900,
-        dday: 'D-1',
-        urgent: true,
-      },
-      {
-        id: 'e-gmp-jeju-2',
-        airline: '제주항공',
-        title: '여름 국내선 찜특가',
-        saleStart: '2025.05.15',
-        saleEnd: '2025.05.23',
-        price: 57900,
-        dday: 'D-8',
-        urgent: false,
-      },
-    ],
-  },
-  {
-    id: 'gmp-pus',
-    departure: '김포',
-    dest: '부산(김해)',
-    country: '대한민국',
-    flag: '🇰🇷',
-    minPrice: 38900,
-    events: [
-      {
-        id: 'e-gmp-pus-1',
-        airline: '진에어',
-        title: '국내선 봄 특가',
-        saleStart: '2025.05.10',
-        saleEnd: '2025.05.20',
-        price: 38900,
-        dday: 'D-3',
-        urgent: true,
-      },
-    ],
-  },
-  // ── 부산 출발 ────────────────────────────────────────────────────────────────
-  {
-    id: 'pus-nrt',
-    departure: '부산',
-    dest: '도쿄',
-    country: '일본',
-    flag: '🇯🇵',
-    minPrice: 149000,
-    events: [
-      {
-        id: 'e-pus-nrt-1',
-        airline: '진에어',
-        title: '부산발 일본 특가',
-        saleStart: '2025.05.14',
-        saleEnd: '2025.05.28',
-        price: 149000,
-        dday: 'D-8',
-        urgent: false,
-      },
-    ],
-  },
-  {
-    id: 'pus-fuk',
-    departure: '부산',
-    dest: '후쿠오카',
-    country: '일본',
-    flag: '🇯🇵',
-    minPrice: 129000,
-    events: [
-      {
-        id: 'e-pus-fuk-1',
-        airline: '에어부산',
-        title: '후쿠오카 특가',
-        saleStart: '2025.05.12',
-        saleEnd: '2025.05.25',
-        price: 129000,
-        dday: 'D-5',
-        urgent: false,
-      },
-    ],
-  },
-  {
-    id: 'pus-osa',
-    departure: '부산',
-    dest: '오사카',
-    country: '일본',
-    flag: '🇯🇵',
-    minPrice: 155000,
-    events: [
-      {
-        id: 'e-pus-osa-1',
-        airline: '에어부산',
-        title: '부산-오사카 특가',
-        saleStart: '2025.05.15',
-        saleEnd: '2025.05.31',
-        price: 155000,
-        dday: 'D-11',
-        urgent: false,
-      },
-    ],
-  },
-  // ── 대구 출발 ────────────────────────────────────────────────────────────────
-  {
-    id: 'tae-osa',
-    departure: '대구',
-    dest: '오사카',
-    country: '일본',
-    flag: '🇯🇵',
-    minPrice: 168000,
-    events: [
-      {
-        id: 'e-tae-osa-1',
-        airline: '에어대구',
-        title: '대구-오사카 특가',
-        saleStart: '2025.05.20',
-        saleEnd: '2025.06.05',
-        price: 168000,
-        dday: 'D-16',
-        urgent: false,
-      },
-    ],
-  },
-  // ── 제주 출발 ────────────────────────────────────────────────────────────────
-  {
-    id: 'cju-gmp',
-    departure: '제주',
-    dest: '서울(김포)',
-    country: '대한민국',
-    flag: '🇰🇷',
-    minPrice: 49900,
-    events: [
-      {
-        id: 'e-cju-gmp-1',
-        airline: '제주항공',
-        title: '제주-서울 특가',
-        saleStart: '2025.05.17',
-        saleEnd: '2025.05.21',
-        price: 49900,
-        dday: 'D-1',
-        urgent: true,
-      },
-    ],
-  },
-  {
-    id: 'cju-icn',
-    departure: '제주',
-    dest: '서울(인천)',
-    country: '대한민국',
-    flag: '🇰🇷',
-    minPrice: 55900,
-    events: [
-      {
-        id: 'e-cju-icn-1',
-        airline: '티웨이항공',
-        title: '제주발 인천 특가',
-        saleStart: '2025.05.15',
-        saleEnd: '2025.05.28',
-        price: 55900,
-        dday: 'D-8',
-        urgent: false,
-      },
-    ],
-  },
-  // ── 청주 출발 ────────────────────────────────────────────────────────────────
-  {
-    id: 'cjj-osa',
-    departure: '청주',
-    dest: '오사카',
-    country: '일본',
-    flag: '🇯🇵',
-    minPrice: 159000,
-    events: [
-      {
-        id: 'e-cjj-osa-1',
-        airline: '티웨이항공',
-        title: '청주발 오사카 특가',
-        saleStart: '2025.05.15',
-        saleEnd: '2025.05.31',
-        price: 159000,
-        dday: 'D-11',
-        urgent: false,
-      },
-    ],
-  },
-  {
-    id: 'cjj-nrt',
-    departure: '청주',
-    dest: '도쿄',
-    country: '일본',
-    flag: '🇯🇵',
-    minPrice: 172000,
-    events: [
-      {
-        id: 'e-cjj-nrt-1',
-        airline: '진에어',
-        title: '청주-도쿄 특가',
-        saleStart: '2025.05.18',
-        saleEnd: '2025.05.25',
-        price: 172000,
-        dday: 'D-5',
-        urgent: false,
-      },
-    ],
-  },
-  // ── 광주 출발 ────────────────────────────────────────────────────────────────
-  {
-    id: 'kwj-osa',
-    departure: '광주',
-    dest: '오사카',
-    country: '일본',
-    flag: '🇯🇵',
-    minPrice: 165000,
-    events: [
-      {
-        id: 'e-kwj-osa-1',
-        airline: '에어서울',
-        title: '광주발 오사카 특가',
-        saleStart: '2025.05.20',
-        saleEnd: '2025.06.03',
-        price: 165000,
-        dday: 'D-14',
-        urgent: false,
-      },
-    ],
-  },
-  // ── 무안 출발 ────────────────────────────────────────────────────────────────
-  {
-    id: 'mwx-bkk',
-    departure: '무안',
-    dest: '방콕',
-    country: '태국',
-    flag: '🇹🇭',
-    minPrice: 219000,
-    events: [
-      {
-        id: 'e-mwx-bkk-1',
-        airline: '타이항공',
-        title: '무안발 방콕 특가',
-        saleStart: '2025.05.19',
-        saleEnd: '2025.06.01',
-        price: 219000,
-        dday: 'D-12',
-        urgent: false,
-      },
-    ],
-  },
-  {
-    id: 'mwx-osa',
-    departure: '무안',
-    dest: '오사카',
-    country: '일본',
-    flag: '🇯🇵',
-    minPrice: 158000,
-    events: [
-      {
-        id: 'e-mwx-osa-1',
-        airline: '제주항공',
-        title: '무안-오사카 특가',
-        saleStart: '2025.05.17',
-        saleEnd: '2025.05.20',
-        price: 158000,
-        dday: 'D-2',
-        urgent: true,
-      },
-    ],
-  },
-  // ── 양양 출발 ────────────────────────────────────────────────────────────────
-  {
-    id: 'yny-nrt',
-    departure: '양양',
-    dest: '도쿄',
-    country: '일본',
-    flag: '🇯🇵',
-    minPrice: 189000,
-    events: [
-      {
-        id: 'e-yny-nrt-1',
-        airline: '플라이강원',
-        title: '양양발 도쿄 특가',
-        saleStart: '2025.05.22',
-        saleEnd: '2025.06.10',
-        price: 189000,
-        dday: 'D-17',
-        urgent: false,
-      },
-    ],
-  },
-];
+function toOption(a: AirportItem): AirportOption {
+  return {
+    code: a.code,
+    city: a.city,
+    flag: a.flag,
+    isoCode: a.isoCode,
+    countryName: a.countryName,
+    continent: a.continent,
+  };
+}
 
-// ─── 캘린더 컴포넌트 ─────────────────────────────────────────────────────────
+// 캘린더 컴포넌트
 
 function CalendarPicker({
   selectedDate,
   onSelect,
+  minDate,
 }: {
   selectedDate: Date;
   onSelect: (date: Date) => void;
+  minDate?: Date;
 }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const effectiveMin = minDate ?? today;
+
   const maxDate = new Date(today);
-  maxDate.setDate(today.getDate() + 60);
+  maxDate.setDate(today.getDate() + 365);
 
   const [viewYear, setViewYear] = useState(selectedDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(selectedDate.getMonth());
@@ -547,29 +119,25 @@ function CalendarPicker({
   const maxYear = maxDate.getFullYear();
   const maxMonth = maxDate.getMonth();
 
+  const minYear = effectiveMin.getFullYear();
+  const minMonth = effectiveMin.getMonth();
+
   const canGoPrev =
-    viewYear > todayYear || (viewYear === todayYear && viewMonth > todayMonth);
+    viewYear > minYear || (viewYear === minYear && viewMonth > minMonth);
   const canGoNext =
     viewYear < maxYear || (viewYear === maxYear && viewMonth < maxMonth);
 
   const goPrev = () => {
     if (!canGoPrev) return;
-    if (viewMonth === 0) {
-      setViewYear((y) => y - 1);
-      setViewMonth(11);
-    } else {
-      setViewMonth((m) => m - 1);
-    }
+    if (viewMonth === 0) { setViewYear((y) => y - 1); setViewMonth(11); }
+    else { setViewMonth((m) => m - 1); }
   };
+
 
   const goNext = () => {
     if (!canGoNext) return;
-    if (viewMonth === 11) {
-      setViewYear((y) => y + 1);
-      setViewMonth(0);
-    } else {
-      setViewMonth((m) => m + 1);
-    }
+    if (viewMonth === 11) { setViewYear((y) => y + 1); setViewMonth(0); }
+    else { setViewMonth((m) => m + 1); }
   };
 
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
@@ -582,13 +150,10 @@ function CalendarPicker({
   while (cells.length % 7 !== 0) cells.push(null);
 
   const weeks: (number | null)[][] = [];
-  for (let i = 0; i < cells.length; i += 7) {
-    weeks.push(cells.slice(i, i + 7));
-  }
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
 
   return (
     <View style={cal.root}>
-      {/* 월 네비게이션 */}
       <View style={cal.monthNav}>
         <TouchableOpacity onPress={goPrev} disabled={!canGoPrev} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={[cal.navArrow, !canGoPrev && cal.navArrowDisabled]}>‹</Text>
@@ -599,40 +164,25 @@ function CalendarPicker({
         </TouchableOpacity>
       </View>
 
-      {/* 요일 헤더 */}
       <View style={cal.weekRow}>
         {DAY_LABELS.map((d, i) => (
-          <Text
-            key={d}
-            style={[
-              cal.dayHeader,
-              i === 0 && cal.sundayText,
-              i === 6 && cal.saturdayText,
-            ]}
-          >
-            {d}
-          </Text>
+          <Text key={d} style={[cal.dayHeader, i === 0 && cal.sundayText, i === 6 && cal.saturdayText]}>{d}</Text>
         ))}
       </View>
 
-      {/* 날짜 그리드 */}
       {weeks.map((week, wi) => (
         <View key={wi} style={cal.weekRow}>
           {week.map((day, di) => {
-            if (day === null) {
-              return <View key={di} style={cal.dayCell} />;
-            }
+            if (day === null) return <View key={di} style={cal.dayCell} />;
             const cellDate = new Date(viewYear, viewMonth, day);
             cellDate.setHours(0, 0, 0, 0);
-            const isPast = cellDate < today;
+            const isPast = cellDate < effectiveMin;
             const isTooFar = cellDate > maxDate;
             const isDisabled = isPast || isTooFar;
             const isToday = cellDate.getTime() === today.getTime();
-            const isSelected =
-              formatDateApi(cellDate) === formatDateApi(selectedDate);
+            const isSelected = formatDateApi(cellDate) === formatDateApi(selectedDate);
             const isSunday = di === 0;
             const isSaturday = di === 6;
-
             return (
               <TouchableOpacity
                 key={di}
@@ -641,22 +191,14 @@ function CalendarPicker({
                 disabled={isDisabled}
                 activeOpacity={0.7}
               >
-                <View
-                  style={[
-                    cal.dayCellInner,
-                    isSelected && cal.dayCellSelected,
-                    isToday && !isSelected && cal.dayCellToday,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      cal.dayNum,
-                      isDisabled && cal.dayNumDisabled,
-                      isSelected && cal.dayNumSelected,
-                      !isDisabled && isSunday && cal.sundayText,
-                      !isDisabled && isSaturday && cal.saturdayText,
-                    ]}
-                  >
+                <View style={[cal.dayCellInner, isSelected && cal.dayCellSelected, isToday && !isSelected && cal.dayCellToday]}>
+                  <Text style={[
+                    cal.dayNum,
+                    isDisabled && cal.dayNumDisabled,
+                    isSelected && cal.dayNumSelected,
+                    !isDisabled && isSunday && cal.sundayText,
+                    !isDisabled && isSaturday && cal.saturdayText,
+                  ]}>
                     {day}
                   </Text>
                 </View>
@@ -669,77 +211,75 @@ function CalendarPicker({
   );
 }
 
-// ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
+// 특가 카드
 
-function EventCard({ event }: { event: FlightEvent }) {
+function DealCard({ deal, onPress }: { deal: DealItem; onPress: () => void }) {
   return (
-    <View style={styles.eventCard}>
-      <View style={styles.eventCardHeader}>
-        <Text style={styles.eventAirline}>{event.airline}</Text>
-        <View style={[styles.ddayBadge, event.urgent && styles.ddayUrgent]}>
-          <Text style={[styles.ddayText, event.urgent && styles.ddayTextUrgent]}>
-            {event.dday}
-          </Text>
+    <TouchableOpacity style={styles.dealCard} onPress={onPress} activeOpacity={0.8}>
+      <View style={styles.dealCardHeader}>
+        <Text style={styles.dealAirline}>{deal.airline}</Text>
+        <View style={[styles.ddayBadge, deal.urgent && styles.ddayUrgent]}>
+          <Text style={[styles.ddayText, deal.urgent && styles.ddayTextUrgent]}>{deal.dday}</Text>
         </View>
       </View>
-      <Text style={styles.eventTitle}>{event.title}</Text>
-      <Text style={styles.eventPeriod}>
-        판매 {event.saleStart} ~ {event.saleEnd}
-      </Text>
-      <Text style={styles.eventPrice}>{event.price.toLocaleString()}원~</Text>
-    </View>
+      <Text style={styles.dealTitle}>{deal.title}</Text>
+      <Text style={styles.dealPeriod}>판매 종료 {deal.dday}</Text>
+      <Text style={styles.dealPrice}>{deal.priceText}</Text>
+    </TouchableOpacity>
   );
 }
 
-function RouteRow({
-  route,
-  expanded,
-  onToggle,
-}: {
-  route: RouteItem;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <View>
-      <TouchableOpacity style={styles.routeRow} onPress={onToggle} activeOpacity={0.75}>
-        <View style={styles.routeLeft}>
-          <Text style={styles.routeFlag}>{route.flag}</Text>
-          <View>
-            <Text style={styles.routeDest}>{route.dest}</Text>
-            <Text style={styles.routeCountry}>{route.country}</Text>
-          </View>
-        </View>
-        <View style={styles.routeRight}>
-          <Text style={styles.routeMinPrice}>
-            최저 {route.minPrice.toLocaleString()}원
-          </Text>
-          <Text style={styles.routeChevron}>{expanded ? '∧' : '∨'}</Text>
-        </View>
-      </TouchableOpacity>
-
-      {expanded && (
-        <View style={styles.eventsContainer}>
-          {route.events.map((event) => (
-            <EventCard key={event.id} event={event} />
-          ))}
-        </View>
-      )}
-
-      <View style={styles.divider} />
-    </View>
-  );
-}
+// 페이지
 
 function Page() {
   const navigation = Route.useNavigation();
-  const [departure, setDeparture] = useState<Airport>('인천');
-  const [dest, setDest] = useState<string>('전체');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const [departureAirports, setDepartureAirports] = useState<AirportItem[]>([]);
+  const [destinations, setDestinations] = useState<AirportOption[]>([]);
+  const [departure, setDeparture] = useState<AirportOption | null>(null);
+  const [dest, setDest] = useState<AirportOption | null>(null);
+  const [routeDeals, setRouteDeals] = useState<DealItem[]>([]);
+  const [selectedContinent, setSelectedContinent] = useState<string | null>(null);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [tripType, setTripType] = useState<TripType>('roundtrip');
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(DATE_LIST[0] ?? new Date());
+  const [returnDate, setReturnDate] = useState<Date | null>(null);
   const toastAnim = useRef(new Animated.Value(0)).current;
   const [toastMsg, setToastMsg] = useState('');
+
+  useEffect(() => {
+    fetchDepartureAirports().then(setDepartureAirports).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (departure && dest) {
+      fetchRouteDeals(departure.city, dest.city).then(setRouteDeals).catch(console.error);
+    } else {
+      setRouteDeals([]);
+    }
+  }, [departure, dest]);
+
+  const koreanAirports: AirportOption[] = [
+    ...DEPARTURE_ORDER
+      .map((code) => departureAirports.find((a) => a.code === code))
+      .filter((a): a is AirportItem => a !== undefined)
+      .map(toOption),
+    ...departureAirports.filter((a) => !DEPARTURE_ORDER.includes(a.code)).map(toOption),
+  ];
+
+  const destGrouped = useMemo(() => {
+    const raw = destinations.reduce<Record<string, Record<string, AirportOption[]>>>(
+      (acc, a) => {
+        const cont = a.continent || '기타';
+        acc[cont] ??= {};
+        (acc[cont][a.isoCode] ??= []).push(a);
+        return acc;
+      },
+      {}
+    );
+    return Object.fromEntries(Object.entries(raw).sort(([a]) => (a === '국내' ? -1 : 1)));
+  }, [destinations]);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -751,54 +291,47 @@ function Page() {
     ]).start();
   };
 
-  const availableDests = useMemo(() => {
-    const dests = ALL_ROUTES
-      .filter((r) => r.departure === departure)
-      .map((r) => r.dest);
-    return ['전체', ...dests];
-  }, [departure]);
-
-  const filteredRoutes = useMemo(
-    () =>
-      ALL_ROUTES.filter(
-        (r) => r.departure === departure && (dest === '전체' || r.dest === dest),
-      ),
-    [departure, dest],
-  );
-
-  const pickerOptions: string[] =
-    pickerTarget === 'departure' ? AIRPORTS : availableDests;
-
-  const handleFlightSearch = () => {
-    if (dest === '전체') {
-      showToast('도착지를 선택해주세요.');
-      return;
-    }
-    navigation.navigate('/flights');
+  const handleDepartureSelect = (option: AirportOption) => {
+    setDeparture(option);
+    setDest(null);
+    setRouteDeals([]);
+    setDestinations([]);
+    fetchDestinations(option.code).then((list) => setDestinations(list.map(toOption))).catch(console.error);
+    setPickerTarget(null);
+    setSelectedContinent(null);
+    setSelectedCountry(null);
   };
 
-  const handlePickerSelect = (option: string) => {
-    if (pickerTarget === 'departure') {
-      setDeparture(option as Airport);
-      setDest('전체');
-      setExpandedId(null);
-    } else {
-      setDest(option);
-      setExpandedId(null);
-    }
+  const handleDestSelect = (option: AirportOption) => {
+    setDest(option);
     setPickerTarget(null);
   };
 
+  const handleOpenDest = () => {
+    if (!departure) { showToast('출발지를 먼저 선택해주세요.'); return; }
+    setSelectedContinent(null);
+    setSelectedCountry(null);
+    setPickerTarget('dest');
+  };
+
+  const handleFlightSearch = () => {
+    if (!departure || !dest) { showToast('출발지와 도착지를 선택해주세요.'); return; }
+    if (tripType === 'roundtrip' && !returnDate) { showToast('귀국일을 선택해주세요.'); return; }
+    navigation.navigate('/flights', {
+      departure: departure.code,
+      destination: dest.code,
+      date: formatDateApi(selectedDate),
+      returnDate: returnDate ? formatDateApi(returnDate) : '',
+      tripType,
+      departureCity: departure.city,
+      destCity: dest.city,
+    });
+  };
+
   const handleTabPress = (label: string) => {
-    if (label === '홈') {
-      navigation.popToTop();
-    }
-    if (label === '찜') {
-      navigation.navigate('/saved');
-    }
-    if (label === '마이') {
-      navigation.navigate('/my');
-    }
+    if (label === '홈') navigation.popToTop();
+    if (label === '찜') navigation.navigate('/saved');
+    if (label === '마이') navigation.navigate('/my');
   };
 
   return (
@@ -806,156 +339,254 @@ function Page() {
       {/* 검색 박스 */}
       <View style={styles.searchBox}>
         <View style={styles.searchRow}>
-          <TouchableOpacity
-            style={styles.searchField}
-            onPress={() => setPickerTarget('departure')}
-          >
+          <TouchableOpacity style={styles.searchField} onPress={() => setPickerTarget('departure')}>
             <Text style={styles.searchLabel}>출발지</Text>
-            <Text style={styles.searchValue}>{departure}</Text>
+            <Text style={[styles.searchValue, !departure && styles.searchPlaceholder]}>
+              {departure?.city ?? '선택'}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.searchFieldDivider} />
 
-          <TouchableOpacity
-            style={styles.searchField}
-            onPress={() => setPickerTarget('dest')}
-          >
+          <TouchableOpacity style={styles.searchField} onPress={handleOpenDest}>
             <Text style={styles.searchLabel}>도착지</Text>
-            <Text style={styles.searchValue}>{dest}</Text>
+            <Text style={[styles.searchValue, !dest && styles.searchPlaceholder]}>
+              {dest?.city ?? '선택'}
+            </Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.searchDividerH} />
 
-        <TouchableOpacity
-          style={styles.dateField}
-          onPress={() => setPickerTarget('date')}
-        >
-          <Text style={styles.searchLabel}>날짜</Text>
-          <Text style={styles.searchValue}>{formatDateLabel(selectedDate)}</Text>
-        </TouchableOpacity>
+        {/* 편도/왕복 토글 */}
+        <View style={styles.tripTypeRow}>
+          {(['oneway', 'roundtrip'] as TripType[]).map((type) => (
+            <TouchableOpacity
+              key={type}
+              style={[styles.tripTypeBtn, tripType === type && styles.tripTypeBtnActive]}
+              onPress={() => {
+                setTripType(type);
+                if (type === 'oneway') setReturnDate(null);
+              }}
+            >
+              <Text style={[styles.tripTypeText, tripType === type && styles.tripTypeTextActive]}>
+                {type === 'oneway' ? '편도' : '왕복'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.searchDividerH} />
+
+        {/* 날짜 */}
+        {tripType === 'oneway' ? (
+          <TouchableOpacity style={styles.dateField} onPress={() => setPickerTarget('date')}>
+            <Text style={styles.searchLabel}>날짜</Text>
+            <Text style={styles.searchValue}>{formatDateLabel(selectedDate)}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.searchRow}>
+            <TouchableOpacity style={styles.searchField} onPress={() => setPickerTarget('date')}>
+              <Text style={styles.searchLabel}>출발일</Text>
+              <Text style={styles.searchValue}>{formatDateLabel(selectedDate)}</Text>
+            </TouchableOpacity>
+            <View style={styles.searchFieldDivider} />
+            <TouchableOpacity style={styles.searchField} onPress={() => setPickerTarget('date-return')}>
+              <Text style={styles.searchLabel}>귀국일</Text>
+              <Text style={[styles.searchValue, !returnDate && styles.searchPlaceholder]}>
+                {returnDate ? formatDateLabel(returnDate) : '선택'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <TouchableOpacity style={styles.searchBtn} onPress={handleFlightSearch}>
           <Text style={styles.searchBtnText}>항공편 찾기</Text>
         </TouchableOpacity>
       </View>
 
-      {/* 추천 섹션 헤더 */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{departure} 출발 추천 특가 ✈️</Text>
-        <Text style={styles.sectionCount}>{filteredRoutes.length}개 노선</Text>
+      {/* 특가 목록 */}
+      <View style={{ flex: 1 }}>
+      {departure && dest ? (
+        <>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>
+              {departure.city} → {dest.city} 특가 ✈️
+            </Text>
+            <Text style={styles.sectionCount}>{routeDeals.length}개</Text>
+          </View>
+          <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+            {routeDeals.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyIcon}>✈️</Text>
+                <Text style={styles.emptyText}>해당 노선의 진행 중인 특가가 없어요</Text>
+              </View>
+            ) : (
+              routeDeals.map((deal) => (
+                <DealCard
+                  key={deal.id}
+                  deal={deal}
+                  onPress={() => navigation.navigate('/deal-detail', { dealId: deal.id })}
+                />
+              ))
+            )}
+            <View style={{ height: 20 }} />
+          </ScrollView>
+        </>
+      ) : (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>🗺️</Text>
+          <Text style={styles.emptyText}>출발지와 도착지를 선택하면{'\n'}해당 노선의 특가를 볼 수 있어요</Text>
+        </View>
+      )}
       </View>
 
-      {/* 노선 리스트 */}
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {filteredRoutes.map((route) => (
-          <RouteRow
-            key={route.id}
-            route={route}
-            expanded={expandedId === route.id}
-            onToggle={() =>
-              setExpandedId((prev) => (prev === route.id ? null : route.id))
-            }
-          />
-        ))}
-        <View style={{ height: 20 }} />
-      </ScrollView>
-
-      {/* 출발지/도착지 선택 모달 */}
+      {/* 출발지 선택 모달 */}
       <Modal
-        visible={pickerTarget === 'departure' || pickerTarget === 'dest'}
+        visible={pickerTarget === 'departure'}
         transparent
         animationType="slide"
         onRequestClose={() => setPickerTarget(null)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setPickerTarget(null)}
-        >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPickerTarget(null)} />
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>
-              {pickerTarget === 'departure' ? '출발지 선택' : '도착지 선택'}
-            </Text>
+            <Text style={styles.modalTitle}>출발지 선택</Text>
             <ScrollView>
-              {pickerOptions.map((option) => {
-                const isSelected =
-                  pickerTarget === 'departure'
-                    ? option === departure
-                    : option === dest;
-                return (
-                  <TouchableOpacity
-                    key={option}
-                    style={styles.pickerOption}
-                    onPress={() => handlePickerSelect(option)}
-                  >
-                    <Text
-                      style={[
-                        styles.pickerOptionText,
-                        isSelected && styles.pickerOptionTextActive,
-                      ]}
-                    >
-                      {option}
-                    </Text>
-                    {isSelected && (
-                      <Text style={styles.pickerCheck}>✓</Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+              {koreanAirports.map((option) => (
+                <Pressable
+                  key={option.code}
+                  style={({ pressed }) => [styles.airportRow, pressed && styles.selectedRow]}
+                  onPress={() => handleDepartureSelect(option)}
+                >
+                  <Text style={[styles.airportText, departure?.code === option.code && styles.selectedText]}>
+                    {option.city}
+                  </Text>
+                  {departure?.code === option.code && <Text style={styles.checkIcon}>✓</Text>}
+                </Pressable>
+              ))}
             </ScrollView>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
-      {/* 날짜 선택 모달 (캘린더) */}
+      {/* 도착지 선택 모달 (3단 패널) */}
+      <Modal
+        visible={pickerTarget === 'dest'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickerTarget(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPickerTarget(null)} />
+          <View style={styles.destModalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>{departure?.city ?? ''} → 도착지 선택</Text>
+            <View style={styles.panelContainer}>
+              {/* 대륙 */}
+              <ScrollView style={styles.panel} showsVerticalScrollIndicator={true}>
+                {Object.keys(destGrouped).map((continent) => (
+                  <Pressable
+                    key={continent}
+                    style={({ pressed }) => [styles.panelRow, (pressed || selectedContinent === continent) && styles.selectedRow]}
+                    onPress={() => { setSelectedContinent(continent); setSelectedCountry(null); }}
+                  >
+                    <Text style={[styles.panelText, selectedContinent === continent && styles.selectedText]}>
+                      {continent}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              {/* 나라 */}
+              <ScrollView style={[styles.panel, styles.panelBorder]} showsVerticalScrollIndicator={true}>
+                {Object.entries(destGrouped[selectedContinent ?? ''] ?? {}).map(([isoCode, airports]) => (
+                  <Pressable
+                    key={isoCode}
+                    style={({ pressed }) => [styles.panelRow, (pressed || selectedCountry === isoCode) && styles.selectedRow]}
+                    onPress={() => setSelectedCountry(isoCode)}
+                  >
+                    <Text style={[styles.panelText, selectedCountry === isoCode && styles.selectedText]}>
+                      {airports[0]?.countryName || isoCode}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              {/* 공항 */}
+              <ScrollView style={[styles.panel, styles.panelBorder]} showsVerticalScrollIndicator={true}>
+                {(destGrouped[selectedContinent ?? '']?.[selectedCountry ?? ''] ?? []).map((option) => (
+                  <TouchableOpacity
+                    key={option.code}
+                    style={styles.panelRow}
+                    onPress={() => handleDestSelect(option)}
+                  >
+                    <Text style={[styles.panelText, dest?.code === option.code && styles.selectedText]}>
+                      {option.city}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 출발일 선택 모달 */}
       <Modal
         visible={pickerTarget === 'date'}
         transparent
         animationType="slide"
         onRequestClose={() => setPickerTarget(null)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setPickerTarget(null)}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={styles.calModalSheet}
-          >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPickerTarget(null)} />
+          <View style={styles.calModalSheet}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>날짜 선택</Text>
+            <Text style={styles.modalTitle}>{tripType === 'roundtrip' ? '출발일 선택' : '날짜 선택'}</Text>
             <CalendarPicker
               selectedDate={selectedDate}
               onSelect={(date) => {
                 setSelectedDate(date);
+                if (returnDate && date >= returnDate) setReturnDate(null);
                 setPickerTarget(null);
               }}
             />
             <View style={{ height: 20 }} />
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 귀국일 선택 모달 */}
+      <Modal
+        visible={pickerTarget === 'date-return'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickerTarget(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPickerTarget(null)} />
+          <View style={styles.calModalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>귀국일 선택</Text>
+            <CalendarPicker
+              selectedDate={returnDate ?? selectedDate}
+              minDate={(() => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); return d; })()}
+              onSelect={(date) => { setReturnDate(date); setPickerTarget(null); }}
+            />
+            <View style={{ height: 20 }} />
+          </View>
+        </View>
       </Modal>
 
       {/* 토스트 */}
       <Animated.View
         pointerEvents="none"
-        style={[
-          styles.toast,
-          {
-            opacity: toastAnim,
-            transform: [
-              {
-                translateY: toastAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [10, 0],
-                }),
-              },
-            ],
-          },
-        ]}
+        style={[styles.toast, {
+          opacity: toastAnim,
+          transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+        }]}
       >
         <Text style={styles.toastText}>{toastMsg}</Text>
       </Animated.View>
@@ -968,14 +599,8 @@ function Page() {
           { label: '찜', active: false },
           { label: '마이', active: false },
         ].map((tab) => (
-          <TouchableOpacity
-            key={tab.label}
-            style={styles.tab}
-            onPress={() => handleTabPress(tab.label)}
-          >
-            <Text style={[styles.tabLabel, tab.active && styles.tabActive]}>
-              {tab.label}
-            </Text>
+          <TouchableOpacity key={tab.label} style={styles.tab} onPress={() => handleTabPress(tab.label)}>
+            <Text style={[styles.tabLabel, tab.active && styles.tabActive]}>{tab.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -983,7 +608,7 @@ function Page() {
   );
 }
 
-// ─── 스타일 ───────────────────────────────────────────────────────────────────
+// 스타일
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
@@ -998,36 +623,42 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     overflow: 'hidden',
   },
-  searchRow: {
+  searchRow: { flexDirection: 'row' },
+  searchField: { flex: 1, paddingVertical: 14, paddingHorizontal: 16 },
+  searchFieldDivider: { width: 1, backgroundColor: COLORS.border, marginVertical: 12 },
+  searchDividerH: { height: 1, backgroundColor: COLORS.border },
+  dateField: { paddingVertical: 14, paddingHorizontal: 16 },
+  searchLabel: { fontSize: 11, color: COLORS.textSecondary, marginBottom: 4 },
+  searchValue: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary },
+  searchPlaceholder: { color: COLORS.textSecondary, fontWeight: '400' },
+
+  // 편도/왕복 토글
+  tripTypeRow: {
     flexDirection: 'row',
-  },
-  searchField: {
-    flex: 1,
-    paddingVertical: 14,
     paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
   },
-  searchFieldDivider: {
-    width: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 12,
-  },
-  searchDividerH: {
-    height: 1,
-    backgroundColor: COLORS.border,
-  },
-  dateField: {
-    paddingVertical: 14,
+  tripTypeBtn: {
     paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.white,
   },
-  searchLabel: {
-    fontSize: 11,
+  tripTypeBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  tripTypeText: {
+    fontSize: 13,
     color: COLORS.textSecondary,
-    marginBottom: 4,
+    fontWeight: '500',
   },
-  searchValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
+  tripTypeTextActive: {
+    color: COLORS.white,
+    fontWeight: '600',
   },
   searchBtn: {
     backgroundColor: COLORS.primary,
@@ -1036,11 +667,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
-  searchBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.white,
-  },
+  searchBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
 
   // 섹션 헤더
   sectionHeader: {
@@ -1050,87 +677,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 8,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-  },
-  sectionCount: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary },
+  sectionCount: { fontSize: 12, color: COLORS.textSecondary },
 
-  // 노선 리스트
   scroll: { flex: 1 },
 
-  // 노선 행
-  routeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+  // 특가 카드
+  dealCard: {
     backgroundColor: COLORS.white,
-  },
-  routeLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  routeFlag: { fontSize: 28 },
-  routeDest: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-  },
-  routeCountry: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  routeRight: {
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  routeMinPrice: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-  routeChevron: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginHorizontal: 20,
-  },
-
-  // 이벤트 아코디언
-  eventsContainer: {
-    backgroundColor: COLORS.eventBg,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-  },
-  eventCard: {
-    backgroundColor: COLORS.white,
+    marginHorizontal: 16,
+    marginBottom: 10,
     borderRadius: 12,
     padding: 14,
     borderWidth: 0.5,
     borderColor: COLORS.border,
   },
-  eventCardHeader: {
+  dealCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 6,
   },
-  eventAirline: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
+  dealAirline: { fontSize: 12, color: COLORS.textSecondary },
   ddayBadge: {
     backgroundColor: COLORS.dday,
     paddingHorizontal: 6,
@@ -1138,35 +706,34 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   ddayUrgent: { backgroundColor: '#FFF0F0' },
-  ddayText: {
-    fontSize: 10,
-    color: COLORS.ddayText,
-    fontWeight: '500',
-  },
+  ddayText: { fontSize: 10, color: COLORS.ddayText, fontWeight: '500' },
   ddayTextUrgent: { color: COLORS.urgent },
-  eventTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+  dealTitle: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 4 },
+  dealPeriod: { fontSize: 11, color: COLORS.textSecondary, marginBottom: 6 },
+  dealPrice: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
+
+  // 빈 상태
+  emptyContainer: { alignItems: 'center', paddingTop: 60, gap: 12 },
+  emptyIcon: { fontSize: 40 },
+  emptyText: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
+
+  // 모달 공통
+  modalOverlay: { flex: 1, backgroundColor: COLORS.overlay, justifyContent: 'flex-end' },
+  modalHandle: {
+    width: 36, height: 4,
+    backgroundColor: COLORS.border,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 16, fontWeight: '700',
     color: COLORS.textPrimary,
-    marginBottom: 4,
-  },
-  eventPeriod: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    marginBottom: 6,
-  },
-  eventPrice: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.primary,
+    paddingHorizontal: 20,
+    marginBottom: 8,
   },
 
-  // 선택 모달 (바텀 시트)
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: COLORS.overlay,
-    justifyContent: 'flex-end',
-  },
+  // 출발지 모달
   modalSheet: {
     backgroundColor: COLORS.white,
     borderTopLeftRadius: 20,
@@ -1175,28 +742,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     maxHeight: '60%',
   },
-  calModalSheet: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 12,
-  },
-  modalHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: COLORS.border,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    paddingHorizontal: 20,
-    marginBottom: 8,
-  },
-  pickerOption: {
+  airportRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1205,18 +751,37 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: COLORS.border,
   },
-  pickerOptionText: {
-    fontSize: 15,
-    color: COLORS.textPrimary,
+  airportText: { fontSize: 15, color: COLORS.textPrimary },
+  checkIcon: { fontSize: 14, color: COLORS.primary, fontWeight: '700' },
+
+  // 도착지 3단 패널 모달
+  destModalSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 12,
+    paddingBottom: 40,
+    height: '70%',
   },
-  pickerOptionTextActive: {
-    color: COLORS.primary,
-    fontWeight: '600',
+  panelContainer: { flexDirection: 'row', flex: 1 },
+  panel: { flex: 1, backgroundColor: COLORS.white },
+  panelBorder: { borderLeftWidth: 0.5, borderLeftColor: COLORS.border },
+  panelRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+    borderBottomColor: COLORS.border,
   },
-  pickerCheck: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: '700',
+  panelText: { fontSize: 13, color: COLORS.textPrimary },
+  selectedRow: { backgroundColor: '#EEF4FF' },
+  selectedText: { color: COLORS.primary, fontWeight: '600' },
+
+  // 캘린더 모달
+  calModalSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 12,
   },
 
   // 토스트
@@ -1229,10 +794,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 20,
   },
-  toastText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-  },
+  toastText: { color: '#FFFFFF', fontSize: 13 },
 
   // 탭바
   tabbar: {
@@ -1247,15 +809,12 @@ const styles = StyleSheet.create({
   tabActive: { color: COLORS.primary, fontWeight: '600' },
 });
 
-// ─── 캘린더 스타일 ────────────────────────────────────────────────────────────
+// 캘린더 스타일
 
 const CELL_SIZE = 40;
 
 const cal = StyleSheet.create({
-  root: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-  },
+  root: { paddingHorizontal: 16, paddingTop: 4 },
   monthNav: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1263,25 +822,10 @@ const cal = StyleSheet.create({
     paddingHorizontal: 8,
     marginBottom: 12,
   },
-  navArrow: {
-    fontSize: 26,
-    fontWeight: '300',
-    color: COLORS.textPrimary,
-    paddingHorizontal: 8,
-  },
-  navArrowDisabled: {
-    color: COLORS.border,
-  },
-  monthLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-  },
-  weekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 4,
-  },
+  navArrow: { fontSize: 26, fontWeight: '300', color: COLORS.textPrimary, paddingHorizontal: 8 },
+  navArrowDisabled: { color: COLORS.border },
+  monthLabel: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary },
+  weekRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 4 },
   dayHeader: {
     width: CELL_SIZE,
     textAlign: 'center',
@@ -1290,41 +834,13 @@ const cal = StyleSheet.create({
     fontWeight: '500',
     paddingVertical: 4,
   },
-  dayCell: {
-    width: CELL_SIZE,
-    height: CELL_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayCellInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayCellSelected: {
-    backgroundColor: COLORS.primary,
-  },
-  dayCellToday: {
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-  },
-  dayNum: {
-    fontSize: 14,
-    color: COLORS.textPrimary,
-  },
-  dayNumDisabled: {
-    color: COLORS.border,
-  },
-  dayNumSelected: {
-    color: COLORS.white,
-    fontWeight: '700',
-  },
-  sundayText: {
-    color: '#FF5252',
-  },
-  saturdayText: {
-    color: COLORS.primary,
-  },
+  dayCell: { width: CELL_SIZE, height: CELL_SIZE, alignItems: 'center', justifyContent: 'center' },
+  dayCellInner: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  dayCellSelected: { backgroundColor: COLORS.primary },
+  dayCellToday: { borderWidth: 1.5, borderColor: COLORS.primary },
+  dayNum: { fontSize: 14, color: COLORS.textPrimary },
+  dayNumDisabled: { color: COLORS.border },
+  dayNumSelected: { color: COLORS.white, fontWeight: '700' },
+  sundayText: { color: '#FF5252' },
+  saturdayText: { color: COLORS.primary },
 });
