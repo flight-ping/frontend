@@ -1,7 +1,6 @@
 import { createRoute } from '@granite-js/react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
   ActivityIndicator,
   Image,
   Linking,
@@ -342,18 +341,7 @@ function Page() {
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [menuTop, setMenuTop] = useState(0);
   const sortBtnRef = useRef<any>(null);
-  const toastAnim = useRef(new Animated.Value(0)).current;
-  const [toastMsg, setToastMsg] = useState('');
-
-  function showToast(msg: string) {
-    setToastMsg(msg);
-    toastAnim.setValue(0);
-    Animated.sequence([
-      Animated.timing(toastAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.delay(1500),
-      Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start();
-  }
+  const [selectionError, setSelectionError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -374,33 +362,38 @@ function Page() {
 
   function handleOutboundDateSelect(d: string) {
     setOutboundDate(d);
+    setSelectionError(null);
   }
 
   function handleReturnDateSelect(d: string) {
     setRetDate(d);
+    setSelectionError(null);
   }
 
   function handleFlightSelect(flight: FlightResult) {
     const leg = flight.legs[0];
-    const depTime = parseTime(leg?.departure ?? '');
 
     if (flightTab === 'outbound') {
       if (selectedReturn && outboundDate === retDate) {
-        const retTime = parseTime(selectedReturn.legs[0]?.departure ?? '');
-        if (retTime && depTime >= retTime) {
-          showToast('같은 날짜일 때 가는 편은 오는 편보다 일찍 출발해야 합니다.');
+        const outArrival = parseTime(leg?.arrival ?? '');
+        const retDep = parseTime(selectedReturn.legs[0]?.departure ?? '');
+        if (outArrival && retDep && outArrival >= retDep) {
+          setSelectionError('가는 편 도착 후 오는 편이 출발하는 항공편을 선택해 주세요.');
           return;
         }
       }
+      setSelectionError(null);
       setSelectedOutbound(flight);
     } else {
       if (selectedOutbound && outboundDate === retDate) {
-        const outTime = parseTime(selectedOutbound.legs[0]?.departure ?? '');
-        if (outTime && depTime <= outTime) {
-          showToast('같은 날짜일 때 오는 편은 가는 편보다 늦게 출발해야 합니다.');
+        const outArrival = parseTime(selectedOutbound.legs[0]?.arrival ?? '');
+        const retDep = parseTime(leg?.departure ?? '');
+        if (outArrival && retDep && retDep <= outArrival) {
+          setSelectionError('가는 편 도착 후 오는 편이 출발하는 항공편을 선택해 주세요.');
           return;
         }
       }
+      setSelectionError(null);
       setSelectedReturn(flight);
     }
   }
@@ -448,7 +441,7 @@ function Page() {
               <TouchableOpacity
                 key={tab}
                 style={styles.flightTab}
-                onPress={() => setFlightTab(tab)}
+                onPress={() => { setFlightTab(tab); setSelectionError(null); }}
               >
                 <View style={styles.flightTabInner}>
                   <Text style={[styles.flightTabText, flightTab === tab && styles.flightTabTextActive]}>
@@ -538,6 +531,11 @@ function Page() {
       ) : (
         <>
           <Text style={styles.resultCount}>{filtered.length}개 항공편</Text>
+          {selectionError && (
+            <View style={styles.selectionErrorBanner}>
+              <Text style={styles.selectionErrorText}>⚠️ {selectionError}</Text>
+            </View>
+          )}
           <ScrollView
             style={styles.scroll}
             showsVerticalScrollIndicator={false}
@@ -564,17 +562,6 @@ function Page() {
           </ScrollView>
         </>
       )}
-
-      {/* 토스트 */}
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.toast, {
-          opacity: toastAnim,
-          transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
-        }]}
-      >
-        <Text style={styles.toastText}>{toastMsg}</Text>
-      </Animated.View>
 
       {/* 선택 패널 */}
       {hasPanel && (
@@ -718,16 +705,21 @@ const styles = StyleSheet.create({
   // 로딩/결과
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   resultCount: { fontSize: 12, color: COLORS.textSecondary, paddingHorizontal: 20, paddingVertical: 10 },
-  toast: {
-    position: 'absolute',
-    bottom: 70,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+  selectionErrorBanner: {
+    marginHorizontal: 16,
+    marginBottom: 6,
+    backgroundColor: '#FFF4E5',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#FFCC80',
   },
-  toastText: { color: '#FFFFFF', fontSize: 13 },
+  selectionErrorText: {
+    fontSize: 13,
+    color: '#E65100',
+    fontWeight: '500',
+  },
   scroll: { flex: 1 },
 
   // 빈 상태
